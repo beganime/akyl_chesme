@@ -7,8 +7,7 @@ from app.api.v1.router import api_router
 from app.db.session import engine
 from app.db.base import Base
 
-# Импорты моделей нужны для регистрации их в метаданных SQLAlchemy перед созданием таблиц
-from app.models import user, bot, device 
+from app.models import *
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
