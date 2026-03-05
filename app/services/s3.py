@@ -10,21 +10,20 @@ logger = logging.getLogger(__name__)
 
 class S3Service:
     def __init__(self):
-        # Используем aioboto3 для асинхронной работы с S3-совместимым API
         self.session = aioboto3.Session()
         self.bucket_name = settings.S3_BUCKET_NAME
         self.endpoint_url = settings.S3_ENDPOINT_URL
 
-    async def upload_file(self, file: UploadFile, folder: str = "uploads") -> str:
+    async def generate_presigned_url(self, filename: str, folder: str = "uploads", expires_in: int = 3600) -> dict:
         """
-        Асинхронно загружает файл в S3 и возвращает публичный URL.
-        Папка (folder) поможет структурировать файлы (например, 'avatars', 'chat_media').
+        Генерирует временную ссылку (Presigned URL) для прямой загрузки файла с мобилки в S3.
+        Разгружает наш сервер на 100% при передаче медиафайлов.
         """
         if not self.endpoint_url or not settings.S3_ACCESS_KEY:
              raise HTTPException(status_code=500, detail="S3 storage is not configured.")
 
-        # Генерируем уникальное имя файла, чтобы избежать коллизий
-        file_extension = file.filename.split(".")[-1] if "." in file.filename else "bin"
+        # Генерируем уникальное имя файла
+        file_extension = filename.split(".")[-1] if "." in filename else "bin"
         unique_filename = f"{folder}/{uuid.uuid4().hex}.{file_extension}"
 
         try:
@@ -35,22 +34,23 @@ class S3Service:
                 aws_secret_access_key=settings.S3_SECRET_KEY
             ) as s3_client:
                 
-                # Загружаем файл напрямую из потока (без сохранения на диск сервера)
-                await s3_client.upload_fileobj(
-                    file.file,
-                    self.bucket_name,
-                    unique_filename,
-                    ExtraArgs={"ContentType": file.content_type}
+                # Генерируем URL для PUT-запроса (действует 1 час)
+                upload_url = await s3_client.generate_presigned_url(
+                    'put_object',
+                    Params={'Bucket': self.bucket_name, 'Key': unique_filename},
+                    ExpiresIn=expires_in
                 )
                 
-                # Формируем URL для доступа к файлу. 
-                # Убедись, что бакет в Reg.ru настроен на публичное чтение.
+                # Формируем итоговый публичный URL (после загрузки)
                 file_url = f"{self.endpoint_url}/{self.bucket_name}/{unique_filename}"
-                return file_url
+                
+                return {
+                    "upload_url": upload_url,
+                    "file_url": file_url
+                }
 
         except ClientError as e:
-            logger.error(f"S3 Upload Error: {e}")
-            raise HTTPException(status_code=500, detail="Failed to upload file to storage")
+            logger.error(f"S3 Presigned URL Error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate presigned URL")
 
-# Инициализируем синглтон для использования в dependency injection
 s3_service = S3Service()
