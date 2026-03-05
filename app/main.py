@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
     # Startup
     async with engine.begin() as conn:
         # В продакшене используйте Alembic для миграций
-        # await conn.run_sync(Base.metadata.create_all) 
+        await conn.run_sync(Base.metadata.create_all) 
         pass
     yield
     # Shutdown
