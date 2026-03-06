@@ -22,19 +22,26 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections[user_id] = websocket
         
-        # Подписываем воркер на персональный канал пользователя в Redis
         await self.pubsub.subscribe(f"user_{user_id}")
-        logger.info(f"User {user_id} connected and subscribed to Redis.")
         
-        # Запускаем фоновую задачу для прослушивания сообщений из Redis
+        # === НОВОЕ: Устанавливаем статус "В сети" в Redis ===
+        # Ключ будет жить вечно, пока юзер не отключится (или можно добавить TTL)
+        await self.redis.set(f"online_status:{user_id}", "online")
+        
+        logger.info(f"User {user_id} connected and subscribed to Redis.")
         asyncio.create_task(self._listen_to_redis(user_id))
 
     def disconnect(self, websocket: WebSocket, user_id: str):
         """Отключение пользователя"""
         if user_id in self.active_connections:
             del self.active_connections[user_id]
+        
+        # === НОВОЕ: Удаляем статус "В сети" из Redis асинхронно ===
+        # Запускаем удаление как фоновую задачу, так как disconnect не асинхронный
+        asyncio.create_task(self.redis.delete(f"online_status:{user_id}"))
+        # Здесь же можно записать текущее время Timestamp в БД как "Был(а) недавно"
+        
         logger.info(f"User {user_id} disconnected.")
-        # В продакшене здесь также нужно обновлять статус "Был в сети" в БД
 
     async def _listen_to_redis(self, user_id: str):
         """Фоновый слушатель: ждет сообщений из Redis и кидает их в сокет"""
