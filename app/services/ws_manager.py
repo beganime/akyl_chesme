@@ -1,3 +1,4 @@
+# app/services/ws_manager.py
 import json
 import asyncio
 import logging
@@ -30,20 +31,21 @@ class ConnectionManager:
             self.rmq_connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
             self.rmq_channel = await self.rmq_connection.channel()
             
-            # Создаем точку обмена (Direct). Через нее будут летать сообщения между регионами
+            # Для Active-Active Exchange должен быть durable=True, чтобы выдерживать падения узлов
             self.exchange = await self.rmq_channel.declare_exchange(
-                "chat_events", aio_pika.ExchangeType.DIRECT
+                "chat_events", 
+                aio_pika.ExchangeType.DIRECT,
+                durable=True
             )
             
             # Создаем Эксклюзивную очередь ДЛЯ ЭТОГО СЕРВЕРА. 
-            # Если сервер (контейнер) умрет, очередь удалится сама (auto_delete=True).
             self.queue = await self.rmq_channel.declare_queue("", exclusive=True, auto_delete=True)
             
             # Начинаем слушать очередь
             await self.queue.consume(self._on_rmq_message)
-            logger.info("RabbitMQ успешно подключен и очередь создана.")
+            logger.info(f"[{settings.SERVER_REGION}] RabbitMQ подключен. Очередь слушает межсерверную шину.")
         except Exception as e:
-            logger.error(f"Ошибка подключения к RabbitMQ: {e}")
+            logger.error(f"[{settings.SERVER_REGION}] Ошибка подключения к RabbitMQ: {e}")
 
     async def _on_rmq_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Обработчик входящих сообщений ИЗ ШИНЫ (от других серверов)"""
@@ -66,14 +68,11 @@ class ConnectionManager:
         self.active_connections[user_id] = websocket
         
         # --- СВЯЗЫВАЕМ С ШИНОЙ ---
-        # Говорим RabbitMQ: "Если кто-то пришлет сообщение с ключом user_{user_id},
-        # перенаправь его в очередь ИМЕННО ЭТОГО сервера".
         if self.queue and self.exchange:
             await self.queue.bind(self.exchange, routing_key=f"user_{user_id}")
         
-        # Обновляем статус в Redis (виден всем серверам)
         await self.redis.set(f"online_status:{user_id}", "online")
-        logger.info(f"User {user_id} connected.")
+        logger.info(f"User {user_id} connected to node {settings.SERVER_REGION}.")
 
     def disconnect(self, websocket: WebSocket, user_id: str):
         """Пользователь отключается"""
@@ -85,20 +84,23 @@ class ConnectionManager:
             asyncio.create_task(self.queue.unbind(self.exchange, routing_key=f"user_{user_id}"))
         
         asyncio.create_task(self.redis.delete(f"online_status:{user_id}"))
-        logger.info(f"User {user_id} disconnected.")
+        logger.info(f"User {user_id} disconnected from node {settings.SERVER_REGION}.")
 
     async def send_personal_message(self, message: dict, user_id: str):
         """
         Отправить сообщение пользователю.
-        Мы просто кидаем его в RabbitMQ. Шина сама найдет, к какому серверу 
-        (ТМ или РФ) подключен получатель и доставит его туда.
+        Доставляется через RabbitMQ. Шина сама найдет, к какому серверу 
+        подключен получатель.
         """
         if self.exchange:
             payload = json.dumps(message).encode()
+            # Добавлена персистентность сообщений (delivery_mode=2)
             await self.exchange.publish(
-                aio_pika.Message(body=payload),
+                aio_pika.Message(
+                    body=payload,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                ),
                 routing_key=f"user_{user_id}"
             )
 
-# Синглтон для использования в эндпоинтах
 manager = ConnectionManager()

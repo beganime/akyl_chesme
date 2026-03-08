@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # ВНИМАНИЕ: Теперь мы подключаем web к PgBouncer (порт 6432), а не напрямую к БД!
+      - SERVER_REGION=RU # В Туркменистане тут нужно будет написать TM
       - POSTGRES_SERVER=pgbouncer
       - POSTGRES_PORT=6432 
       - REDIS_HOST=redis
@@ -27,7 +27,7 @@ services:
     restart: always
     command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q main-queue
     environment:
-      # Воркеры тоже ходят через пулер
+      - SERVER_REGION=RU
       - POSTGRES_SERVER=pgbouncer
       - POSTGRES_PORT=6432
       - REDIS_HOST=redis
@@ -42,7 +42,6 @@ services:
       pgbouncer:
         condition: service_started
 
-  # === НОВЫЙ СЕРВИС: PgBouncer (Connection Pooler) ===
   pgbouncer:
     image: edoburu/pgbouncer:latest
     container_name: akyl_pgbouncer
@@ -53,14 +52,11 @@ services:
       - POSTGRESQL_DATABASE=${POSTGRES_DB:-chat}
       - POSTGRESQL_HOST=db
       - POSTGRESQL_PORT=5432
-      # Режим transaction идеален для FastAPI + SQLAlchemy Async
       - PGBOUNCER_POOL_MODE=transaction
-      # Выдержим 10 000 подключений от клиентов...
       - PGBOUNCER_MAX_CLIENT_CONN=10000
-      # ...и упакуем их в 40 реальных подключений к БД
       - PGBOUNCER_DEFAULT_POOL_SIZE=40
     ports:
-      - "6432:5432" # Порт пулера
+      - "6432:5432"
     depends_on:
       db:
         condition: service_healthy
@@ -74,9 +70,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0000}
       POSTGRES_DB: ${POSTGRES_DB:-chat}
     ports:
-      - "5432:5432" # Оставляем для локального подключения админов / Alembic
+      - "5432:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # НОВОЕ: Настройка БД для логической репликации (уровень WAL должен быть logical)
+    command: ["postgres", "-c", "wal_level=logical"] 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
