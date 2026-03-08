@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, bot, users, websockets, chats, storage, search # Добавили chats
+from app.api.v1.endpoints import auth, bot, devices, users, websockets, chats, storage, search # Добавили chats
 
 api_router = APIRouter()
 
