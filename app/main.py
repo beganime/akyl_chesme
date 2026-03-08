@@ -6,23 +6,19 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.api.v1.router import api_router
 from app.db.session import engine
-from app.db.base import Base
-from app.core.firebase import init_firebase # Импорт Firebase
-from app.services.ws_manager import manager # Добавим задел на 3 этап
-
-from app.models import *
+from app.core.firebase import init_firebase
+from app.services.ws_manager import manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
     init_firebase() # 1. Запускаем Firebase
     
-    # 2. Инициализируем RabbitMQ (для Этапа 3)
+    # 2. Инициализируем RabbitMQ (для Этапа 3 и 4)
     await manager.setup_rabbitmq()
     
-    async with engine.begin() as conn:
-        # 3. Создаем таблицы (в проде заменится на Alembic)
-        await conn.run_sync(Base.metadata.create_all) 
+    # ВНИМАНИЕ: Мы удалили Base.metadata.create_all
+    # Теперь структура таблиц управляется ИСКЛЮЧИТЕЛЬНО через Alembic миграции!
     yield
     # --- SHUTDOWN ---
     if manager.rmq_connection:
