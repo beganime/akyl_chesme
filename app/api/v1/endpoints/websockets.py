@@ -15,6 +15,10 @@ from app.models.message import Message, Attachment
 from app.models.chat import Chat, ChatMember
 from app.models.bot import BotConfig 
 from app.tasks.bot_tasks import dispatch_webhook
+from app.models.device import DeviceSession
+from app.models.user import User
+from app.tasks.push_tasks import send_push_notification
+
 
 router = APIRouter()
 
@@ -110,10 +114,40 @@ async def websocket_endpoint(
                             "created_at": created_iso
                         }
                         
-                        for member_id in chat_members:
-                            if member_id != user_id: 
-                                await manager.send_personal_message(broadcast_payload, member_id)
+                        # ================= НОВОЕ: Сбор данных для PUSH =================
+                        receivers_ids = [m_id for m_id in chat_members if m_id != user_id]
+                        
+                        for member_id in receivers_ids:
+                            # 1. Отправляем в вебсокет (он дойдет, только если юзер онлайн)
+                            await manager.send_personal_message(broadcast_payload, member_id)
 
+                        # 2. Собираем FCM токены получателей (кто подписан на пуши)
+                        if receivers_ids:
+                            # Получаем имя отправителя для заголовка пуша
+                            sender_stmt = select(User.name, User.username).where(User.id == user_id)
+                            sender = (await session.execute(sender_stmt)).first()
+                            sender_name = sender.name or sender.username if sender else "Akyl Chesme"
+
+                            devices_stmt = select(DeviceSession.push_token).where(
+                                DeviceSession.user_id.in_(receivers_ids),
+                                DeviceSession.is_active == True,
+                                DeviceSession.push_token.isnot(None)
+                            )
+                            tokens = (await session.execute(devices_stmt)).scalars().all()
+                            
+                            if tokens:
+                                # Формируем текст уведомления (если фото/файл - пишем спец. текст)
+                                push_body = text if text else "📷 Прикреплен файл"
+                                push_data = {"chat_id": chat_id, "message_id": new_msg.id}
+                                
+                                # Отправляем асинхронную задачу в Celery!
+                                send_push_notification.delay(
+                                    tokens=list(tokens), 
+                                    title=f"Новое сообщение от {sender_name}", 
+                                    body=push_body,
+                                    data=push_data
+                                )
+                                
                         # ================= НОВОЕ: WEBHOOK DISPATCHER =================
                         # 7. Проверяем, есть ли среди участников боты с настроенным webhook
                         bot_stmt = select(BotConfig.webhook_url, BotConfig.bot_id).where(

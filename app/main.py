@@ -42,3 +42,15 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "akyl-chesme-backend"}
+
+from app.core.firebase import init_firebase # ДОБАВИТЬ ИМПОРТ
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_firebase() # ИНИЦИАЛИЗАЦИЯ FIREBASE
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all) 
+    yield
+    # Shutdown
+    await engine.dispose()

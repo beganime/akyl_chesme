@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     
     # CORS
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
+    FIREBASE_CREDENTIALS_PATH: str | None = None
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod

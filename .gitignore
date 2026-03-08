@@ -9,6 +9,7 @@ venv/
 build/
 dist/
 *.egg-info/
+*.json
 
 # Специфично для uv / pip
 .cache

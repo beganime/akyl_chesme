@@ -11,6 +11,10 @@ from app.models.chat import Chat, ChatMember
 from app.schemas.chat import MessageResponse
 from app.services.ws_manager import manager
 
+from app.models.device import DeviceSession
+from app.models.user import User
+from app.tasks.push_tasks import send_push_notification
+
 router = APIRouter()
 
 class BotMessageRequest(BaseModel):
@@ -85,10 +89,31 @@ async def bot_send_message(
     # Ищем всех участников чата, чтобы доставить им сообщение
     members_stmt = select(ChatMember.user_id).where(ChatMember.chat_id == payload.chat_id)
     chat_members = (await db.execute(members_stmt)).scalars().all()
+          
+    receivers_ids = [m for m in chat_members if m != bot_id]
     
-    for member_id in chat_members:
-        if member_id != bot_id:
-            # manager.send_personal_message сам закинет в Redis, и нужный воркер отдаст в WS
-            await manager.send_personal_message(broadcast_payload, member_id)
+    for member_id in receivers_ids:
+        # manager.send_personal_message сам закинет в Redis, и нужный воркер отдаст в WS
+        await manager.send_personal_message(broadcast_payload, member_id)
             
+    # --- НОВОЕ: Отправка PUSH от лица бота ---
+    if receivers_ids:
+        bot_user = (await db.execute(select(User.name, User.username).where(User.id == bot_id))).first()
+        bot_name = bot_user.name or bot_user.username if bot_user else "Бот"
+
+        devices_stmt = select(DeviceSession.push_token).where(
+            DeviceSession.user_id.in_(receivers_ids),
+            DeviceSession.is_active == True,
+            DeviceSession.push_token.isnot(None)
+        )
+        tokens = (await db.execute(devices_stmt)).scalars().all()
+        
+        if tokens:
+            send_push_notification.delay(
+                tokens=list(tokens),
+                title=bot_name,
+                body=payload.text,
+                data={"chat_id": payload.chat_id, "message_id": new_msg.id}
+            )
+
     return new_msg
