@@ -13,6 +13,8 @@ from app.db.session import async_session_maker
 from app.services.ws_manager import manager
 from app.models.message import Message, Attachment
 from app.models.chat import Chat, ChatMember
+from app.models.bot import BotConfig 
+from app.tasks.bot_tasks import dispatch_webhook
 
 router = APIRouter()
 
@@ -109,11 +111,35 @@ async def websocket_endpoint(
                         }
                         
                         for member_id in chat_members:
-                            if member_id != user_id: # Отправителю уже ушел ACK, ему дублировать не надо
+                            if member_id != user_id: 
                                 await manager.send_personal_message(broadcast_payload, member_id)
+
+                        # ================= НОВОЕ: WEBHOOK DISPATCHER =================
+                        # 7. Проверяем, есть ли среди участников боты с настроенным webhook
+                        bot_stmt = select(BotConfig.webhook_url, BotConfig.bot_id).where(
+                            BotConfig.bot_id.in_(chat_members),
+                            BotConfig.is_active == True,
+                            BotConfig.webhook_url.isnot(None)
+                        )
+                        bots = (await session.execute(bot_stmt)).all()
+                        
+                        for webhook_url, b_id in bots:
+                            if b_id != user_id: # Если отправитель сам не является этим ботом
+                                webhook_payload = {
+                                    "update_type": "message",
+                                    "message": {
+                                        "message_id": new_msg.id,
+                                        "chat_id": chat_id,
+                                        "sender_id": user_id,
+                                        "text": text,
+                                        "created_at": created_iso
+                                    }
+                                }
+                                # Делегируем отправку Celery (не блокируем Event Loop!)
+                                dispatch_webhook.delay(webhook_url, webhook_payload)
                                 
             except json.JSONDecodeError:
-                pass # Игнорируем кривой JSON
+                pass
                 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
