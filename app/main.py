@@ -1,3 +1,4 @@
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -6,18 +7,26 @@ from app.core.config import settings
 from app.api.v1.router import api_router
 from app.db.session import engine
 from app.db.base import Base
+from app.core.firebase import init_firebase # Импорт Firebase
+from app.services.ws_manager import manager # Добавим задел на 3 этап
 
 from app.models import *
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # --- STARTUP ---
+    init_firebase() # 1. Запускаем Firebase
+    
+    # 2. Инициализируем RabbitMQ (для Этапа 3)
+    await manager.setup_rabbitmq()
+    
     async with engine.begin() as conn:
-        # В продакшене используйте Alembic для миграций
+        # 3. Создаем таблицы (в проде заменится на Alembic)
         await conn.run_sync(Base.metadata.create_all) 
-        pass
     yield
-    # Shutdown
+    # --- SHUTDOWN ---
+    if manager.rmq_connection:
+        await manager.rmq_connection.close()
     await engine.dispose()
 
 app = FastAPI(
@@ -42,15 +51,3 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "akyl-chesme-backend"}
-
-from app.core.firebase import init_firebase # ДОБАВИТЬ ИМПОРТ
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    init_firebase() # ИНИЦИАЛИЗАЦИЯ FIREBASE
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all) 
-    yield
-    # Shutdown
-    await engine.dispose()

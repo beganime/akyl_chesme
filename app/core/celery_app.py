@@ -1,10 +1,13 @@
 from celery import Celery
 from app.core.config import settings
 
-# Инициализируем Celery, используя Redis URL из наших настроек
+# Если передан CELERY_BROKER_URL (например, из docker-compose), используем его, иначе RABBITMQ_URL
+broker_url = settings.CELERY_BROKER_URL or settings.RABBITMQ_URL
+
+# Инициализируем Celery: задачи летят через RabbitMQ, результаты хранятся в Redis
 celery_app = Celery(
     "akyl_worker",
-    broker=settings.REDIS_URL,
+    broker=broker_url,
     backend=settings.REDIS_URL
 )
 
@@ -16,10 +19,9 @@ celery_app.conf.update(
     timezone="Asia/Ashgabat",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=30, # Жесткий лимит на выполнение задачи (чтобы зависшие боты не забили воркеры)
+    task_time_limit=30, 
 )
 
-# Маршрутизация задач (на будущее, если будем бить на разные очереди)
 celery_app.conf.task_routes = {
     "app.tasks.*": {"queue": "main-queue"}
 }

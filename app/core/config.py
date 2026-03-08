@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    # RabbitMQ (Добавлено для Этапа 3)
+    RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
+    CELERY_BROKER_URL: str | None = None
+
     # S3 Storage
     S3_ENDPOINT_URL: str | None = None
     S3_ACCESS_KEY: str | None = None
@@ -42,6 +46,8 @@ class Settings(BaseSettings):
     
     # CORS
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
+    
+    # Firebase
     FIREBASE_CREDENTIALS_PATH: str | None = None
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
@@ -56,6 +62,7 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
         env_file = ".env"
+        extra = "ignore" # Игнорируем лишние переменные в .env, чтобы не было ошибок Pydantic
 
 
 settings = Settings()
