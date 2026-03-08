@@ -1,20 +1,17 @@
+# app/core/config.py
 import secrets
-from typing import Any, Literal, Union
-
-from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn, field_validator
+from typing import Any, Union
+from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings
-
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Akyl Chesme"
     
-    # Security
     SECRET_KEY: str = secrets.token_urlsafe(32)
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Database
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
@@ -23,9 +20,17 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
+        """URL для самого приложения (пойдет через PgBouncer, если POSTGRES_PORT=6432)"""
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
-    # Redis
+    @property
+    def DIRECT_DATABASE_URL(self) -> str:
+        """URL для Alembic (всегда напрямую в БД, минуя PgBouncer)"""
+        # Если сервер указан как pgbouncer, значит база живет в контейнере 'db' на порту 5432
+        host = "db" if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_SERVER
+        port = 5432 if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_PORT
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{host}:{port}/{self.POSTGRES_DB}"
+
     REDIS_HOST: str
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
@@ -34,20 +39,15 @@ class Settings(BaseSettings):
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # RabbitMQ (Добавлено для Этапа 3)
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
     CELERY_BROKER_URL: str | None = None
 
-    # S3 Storage
     S3_ENDPOINT_URL: str | None = None
     S3_ACCESS_KEY: str | None = None
     S3_SECRET_KEY: str | None = None
     S3_BUCKET_NAME: str = "akyl-chesme-media"
     
-    # CORS
     BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
-    
-    # Firebase
     FIREBASE_CREDENTIALS_PATH: str | None = None
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
@@ -62,7 +62,6 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
         env_file = ".env"
-        extra = "ignore" # Игнорируем лишние переменные в .env, чтобы не было ошибок Pydantic
-
+        extra = "ignore"
 
 settings = Settings()

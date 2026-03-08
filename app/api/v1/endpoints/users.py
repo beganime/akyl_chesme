@@ -1,9 +1,11 @@
 # app/api/v1/endpoints/users.py
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import redis.asyncio as aioredis
+from typing import Optional
 
 from app.db.session import get_db
 from app.models.user import User
@@ -13,53 +15,57 @@ from app.core.config import settings
 
 router = APIRouter()
 
-# Инициализация Redis клиента для кэша
 redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    """
-    Регистрация нового пользователя.
-    """
     result = await db.execute(select(User).where(User.username == user_in.username))
     if result.scalars().first():
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this username already exists in the system.",
-        )
+        raise HTTPException(status_code=400, detail="Username already exists.")
     
-    db_user = User(
-        username=user_in.username,
-        name=user_in.name
-    )
+    db_user = User(username=user_in.username, name=user_in.name)
     db_user.set_password(user_in.password)
-    
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
-    
     return db_user
 
 @router.get("/me", response_model=UserResponse)
 async def read_user_me(current_user: User = Depends(get_current_user)):
-    """
-    Получить данные текущего авторизованного пользователя.
-    Использует Redis для кэширования профиля (TTL 5 минут), чтобы разгрузить БД.
-    """
+    """Получение профиля (кэшируется в Redis на 5 минут)."""
     cache_key = f"user_profile:{current_user.id}"
     
-    # 1. Проверяем кэш
     cached_profile = await redis_client.get(cache_key)
     if cached_profile:
-        # Отдаем из оперативной памяти за миллисекунды
         return json.loads(cached_profile)
     
-    # 2. Если в кэше нет, берем данные из current_user (которые достались из БД в deps.py)
-    # Формируем словарь, используя схему Pydantic для фильтрации данных
     profile_data = UserResponse.model_validate(current_user).model_dump()
-    
-    # 3. Сохраняем в кэш на 300 секунд (5 минут)
     await redis_client.setex(cache_key, 300, json.dumps(profile_data))
     
     return current_user
 
+@router.put("/me", response_model=UserResponse)
+async def update_user_me(
+    user_in: UserUpdate, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """Обновление данных и сброс кэша Redis."""
+    if user_in.name is not None:
+        current_user.name = user_in.name
+    if user_in.avatar_url is not None:
+        current_user.avatar_url = user_in.avatar_url
+        
+    await db.commit()
+    await db.refresh(current_user)
+    
+    # ИНВАЛИДАЦИЯ КЭША: Сбрасываем старый профиль, чтобы при следующем GET запросе 
+    # пользователь увидел свежие данные.
+    cache_key = f"user_profile:{current_user.id}"
+    await redis_client.delete(cache_key)
+    
+    return current_user

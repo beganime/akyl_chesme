@@ -17,16 +17,11 @@ from app.models import *
 # Это объект конфигурации Alembic, который дает доступ к значениям в .ini файле
 config = context.config
 
-# Переопределяем URL базы данных из наших настроек (чтобы не хранить пароли в alembic.ini)
-# Заменяем префикс для совместимости с asyncpg
-db_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-config.set_main_option("sqlalchemy.url", db_url)
+config.set_main_option("sqlalchemy.url", settings.DIRECT_DATABASE_URL)
 
-# Настройка логирования
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Передаем метаданные наших моделей
 target_metadata = Base.metadata
 
 

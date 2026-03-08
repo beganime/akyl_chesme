@@ -1,16 +1,20 @@
+# app/db/session.py
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
-# Создаем движок с настройками пула для высокой нагрузки
+# 1. Отключаем pool_size и max_overflow (используем NullPool). Пулингом теперь занимается только PgBouncer.
+# 2. Передаем prepared_statement_cache_size=0, иначе PgBouncer в режиме transaction сломает запросы.
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=20,  # Количество соединений в пуле
-    max_overflow=40, # Дополнительные соединения при пике
-    echo=False,      # В продакшене логи SQL отключаем
+    poolclass=NullPool, 
+    echo=False,      
+    connect_args={
+        "prepared_statement_cache_size": 0, 
+        "statement_cache_size": 0
+    }
 )
 
-# Фабрика сессий
 async_session_maker = async_sessionmaker(
     engine, 
     class_=AsyncSession, 
@@ -20,7 +24,6 @@ async_session_maker = async_sessionmaker(
 )
 
 async def get_db() -> AsyncSession:
-    """Зависимость для внедрения сессии БД в эндпоинты."""
     async with async_session_maker() as session:
         try:
             yield session
