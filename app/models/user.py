@@ -12,7 +12,7 @@ class User(Base):
     email = Column(String, nullable=True) # Nullable для ботов
     hashed_password = Column(String, nullable=True) # Nullable для ботов
     avatar_url = Column(String, nullable=True)
-    name = Column(String, nullable=True) # Full name
+    name = Column(String, nullable=True, index=True)
     
     # Связи
     device_sessions = relationship("DeviceSession", back_populates="user", cascade="all, delete-orphan")
