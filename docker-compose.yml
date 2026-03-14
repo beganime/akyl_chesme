@@ -41,26 +41,24 @@ services:
         condition: service_healthy
       pgbouncer:
         condition: service_started
-
+ 
   pgbouncer:
-    # ИСПОЛЬЗУЕМ НАДЕЖНЫЙ ОБРАЗ BITNAMI (подходит под твои переменные)
-    image: bitnami/pgbouncer:latest
+    image: edoburu/pgbouncer:latest
     container_name: akyl_pgbouncer
     restart: always
     environment:
-      - POSTGRESQL_HOST=db
-      - POSTGRESQL_PORT=5432
-      - POSTGRESQL_USERNAME=${POSTGRES_USER:-postgres}
-      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-0000}
-      - POSTGRESQL_DATABASE=${POSTGRES_DB:-chat}
-      - PGBOUNCER_DATABASE=${POSTGRES_DB:-chat}
-      - PGBOUNCER_PORT=6432
-      - PGBOUNCER_POOL_MODE=transaction
-      - PGBOUNCER_MAX_CLIENT_CONN=10000
-      - PGBOUNCER_DEFAULT_POOL_SIZE=40
-      - PGBOUNCER_IGNORE_STARTUP_PARAMETERS=extra_float_digits
+      # Для edoburu используются переменные с префиксом DB_ и без PGBOUNCER_
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-0000}
+      - DB_NAME=${POSTGRES_DB:-chat}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=10000
+      - DEFAULT_POOL_SIZE=40
+      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
     ports:
-      - "6432:6432"
+      - "6432:5432"
     depends_on:
       db:
         condition: service_healthy
