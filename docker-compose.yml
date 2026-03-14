@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     environment:
       - SERVER_REGION=RU
-      - POSTGRES_SERVER=pgbouncer
+      - POSTGRES_SERVER=db
       # ИСПРАВЛЕНО: бэкенд внутри сети Docker стучится на 5432
       - POSTGRES_PORT=5432 
       - REDIS_HOST=redis
@@ -15,8 +15,8 @@ services:
     env_file:
       - .env
     depends_on:
-      pgbouncer:
-        condition: service_started
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -29,8 +29,10 @@ services:
     command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q main-queue
     environment:
       - SERVER_REGION=RU
-      - POSTGRES_SERVER=pgbouncer
-      # ИСПРАВЛЕНО: celery внутри сети Docker стучится на 5432
+      # Временно подключаемся напрямую к Postgres: PgBouncer в текущей конфигурации
+      # отдаёт "bouncer config error" и роняет регистрацию (500).
+      - POSTGRES_SERVER=db
+      # Бэкенд внутри сети Docker подключается напрямую к Postgres
       - POSTGRES_PORT=5432
       - REDIS_HOST=redis
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/ 
@@ -41,8 +43,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      pgbouncer:
-        condition: service_started
+      db:
+        condition: service_healthy
 
   pgbouncer:
     image: edoburu/pgbouncer:latest
@@ -54,7 +56,6 @@ services:
       - DB_USER=${POSTGRES_USER:-postgres}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-0000}
       - DB_NAME=${POSTGRES_DB:-chat}
-      - AUTH_TYPE=any
       - POOL_MODE=transaction
       - MAX_CLIENT_CONN=10000
       - DEFAULT_POOL_SIZE=40
