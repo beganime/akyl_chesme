@@ -1,12 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Any, Union
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt
 
 from app.core.config import settings
-
-# Настройка passlib для хэширования паролей с использованием bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Определение алгоритма для JWT
 ALGORITHM = "HS256"
@@ -15,15 +12,25 @@ ALGORITHM = "HS256"
 def get_password_hash(password: str) -> str:
     """
     Хэширует пароль перед сохранением в базу данных.
+    Используется нативный bcrypt для высокой производительности и безопасности.
     """
-    return pwd_context.hash(password)
+    # bcrypt требует байтовые строки
+    pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(pwd_bytes, salt)
+    
+    # Возвращаем обычную строку для корректного сохранения в PostgreSQL
+    return hashed_password.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Проверяет, совпадает ли введенный пароль с хэшем из БД.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    password_byte_enc = plain_password.encode('utf-8')
+    hashed_password_byte_enc = hashed_password.encode('utf-8')
+    
+    return bcrypt.checkpw(password_byte_enc, hashed_password_byte_enc)
 
 
 def create_access_token(

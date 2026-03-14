@@ -1,7 +1,8 @@
 from sqlalchemy import Column, String, Boolean, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.db.base import Base
-from app.core.security import get_password_hash
+# Импортируем готовые функции из нашего security-модуля
+from app.core.security import get_password_hash, verify_password as verify_hash
 
 class User(Base):
     __tablename__ = "users"
@@ -22,11 +23,12 @@ class User(Base):
     settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
     def set_password(self, password: str):
+        """Хеширует и устанавливает пароль"""
         self.hashed_password = get_password_hash(password)
 
     def verify_password(self, password: str) -> bool:
+        """Проверяет соответствие пароля хешу"""
         if not self.hashed_password:
             return False
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        return pwd_context.verify(password, self.hashed_password)
+        # Делегируем проверку централизованному методу
+        return verify_hash(password, self.hashed_password)
