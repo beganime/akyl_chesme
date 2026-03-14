@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - SERVER_REGION=RU # В Туркменистане тут нужно будет написать TM
+      - SERVER_REGION=RU
       - POSTGRES_SERVER=pgbouncer
       - POSTGRES_PORT=6432 
       - REDIS_HOST=redis
@@ -43,24 +43,28 @@ services:
         condition: service_started
 
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    # ИСПОЛЬЗУЕМ НАДЕЖНЫЙ ОБРАЗ BITNAMI (подходит под твои переменные)
+    image: bitnami/pgbouncer:latest
     container_name: akyl_pgbouncer
     restart: always
     environment:
-      # Правильные переменные для edoburu/pgbouncer
-      - DB_HOST=db
-      - DB_USER=${POSTGRES_USER:-postgres}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-0000}
-      - DB_NAME=${POSTGRES_DB:-chat}
-      - DB_PORT=5432
-      - POOL_MODE=transaction
-      - MAX_CLIENT_CONN=10000
-      - DEFAULT_POOL_SIZE=40
+      - POSTGRESQL_HOST=db
+      - POSTGRESQL_PORT=5432
+      - POSTGRESQL_USERNAME=${POSTGRES_USER:-postgres}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-0000}
+      - POSTGRESQL_DATABASE=${POSTGRES_DB:-chat}
+      - PGBOUNCER_DATABASE=${POSTGRES_DB:-chat}
+      - PGBOUNCER_PORT=6432
+      - PGBOUNCER_POOL_MODE=transaction
+      - PGBOUNCER_MAX_CLIENT_CONN=10000
+      - PGBOUNCER_DEFAULT_POOL_SIZE=40
+      - PGBOUNCER_IGNORE_STARTUP_PARAMETERS=extra_float_digits
     ports:
-      - "6432:5432"
+      - "6432:6432"
     depends_on:
       db:
         condition: service_healthy
+
   db:
     image: postgres:15-alpine
     container_name: akyl_db
@@ -70,7 +74,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0000}
       POSTGRES_DB: ${POSTGRES_DB:-chat}
       POSTGRES_HOST_AUTH_METHOD: md5 
-    # СТРОКИ С ports ЗДЕСЬ БОЛЬШЕ НЕТ!
     volumes:
       - postgres_data:/var/lib/postgresql/data
     command: ["postgres", "-c", "wal_level=logical", "-c", "password_encryption=md5"] 
@@ -79,6 +82,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: akyl_redis
