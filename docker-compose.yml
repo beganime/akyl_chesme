@@ -52,11 +52,14 @@ services:
       - POSTGRESQL_DATABASE=${POSTGRES_DB:-chat}
       - POSTGRESQL_HOST=db
       - POSTGRESQL_PORT=5432
+      # Явно указываем внутренний порт для PgBouncer
+      - PGBOUNCER_LISTEN_PORT=6432 
       - PGBOUNCER_POOL_MODE=transaction
       - PGBOUNCER_MAX_CLIENT_CONN=10000
       - PGBOUNCER_DEFAULT_POOL_SIZE=40
     ports:
-      - "6432:5432"
+      # Пробрасываем 6432 порт наружу
+      - "6432:6432"
     depends_on:
       db:
         condition: service_healthy
@@ -69,12 +72,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0000}
       POSTGRES_DB: ${POSTGRES_DB:-chat}
+      # Переключаем авторизацию на md5 для совместимости с PgBouncer
+      POSTGRES_HOST_AUTH_METHOD: md5 
     ports:
       - "5432:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # НОВОЕ: Настройка БД для логической репликации (уровень WAL должен быть logical)
-    command: ["postgres", "-c", "wal_level=logical"] 
+    # Добавляем флаг password_encryption=md5
+    command: ["postgres", "-c", "wal_level=logical", "-c", "password_encryption=md5"] 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
