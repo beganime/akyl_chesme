@@ -8,7 +8,8 @@ services:
     environment:
       - SERVER_REGION=RU
       - POSTGRES_SERVER=pgbouncer
-      - POSTGRES_PORT=6432 
+      # ИСПРАВЛЕНО: бэкенд внутри сети Docker стучится на 5432
+      - POSTGRES_PORT=5432 
       - REDIS_HOST=redis
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     env_file:
@@ -29,7 +30,8 @@ services:
     environment:
       - SERVER_REGION=RU
       - POSTGRES_SERVER=pgbouncer
-      - POSTGRES_PORT=6432
+      # ИСПРАВЛЕНО: celery внутри сети Docker стучится на 5432
+      - POSTGRES_PORT=5432
       - REDIS_HOST=redis
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/ 
     env_file:
@@ -41,13 +43,12 @@ services:
         condition: service_healthy
       pgbouncer:
         condition: service_started
- 
+
   pgbouncer:
     image: edoburu/pgbouncer:latest
     container_name: akyl_pgbouncer
     restart: always
     environment:
-      # Для edoburu используются переменные с префиксом DB_ и без PGBOUNCER_
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER:-postgres}
@@ -58,6 +59,7 @@ services:
       - DEFAULT_POOL_SIZE=40
       - IGNORE_STARTUP_PARAMETERS=extra_float_digits
     ports:
+      # Наружу отдаем 6432, чтобы ты мог подключиться через DBeaver, а внутри он 5432
       - "6432:5432"
     depends_on:
       db:
