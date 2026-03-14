@@ -47,23 +47,20 @@ services:
     container_name: akyl_pgbouncer
     restart: always
     environment:
-      - POSTGRESQL_USERNAME=${POSTGRES_USER:-postgres}
-      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-0000}
-      - POSTGRESQL_DATABASE=${POSTGRES_DB:-chat}
-      - POSTGRESQL_HOST=db
-      - POSTGRESQL_PORT=5432
-      # Явно указываем внутренний порт для PgBouncer
-      - PGBOUNCER_LISTEN_PORT=6432 
-      - PGBOUNCER_POOL_MODE=transaction
-      - PGBOUNCER_MAX_CLIENT_CONN=10000
-      - PGBOUNCER_DEFAULT_POOL_SIZE=40
+      # Правильные переменные для edoburu/pgbouncer
+      - DB_HOST=db
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-0000}
+      - DB_NAME=${POSTGRES_DB:-chat}
+      - DB_PORT=5432
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=10000
+      - DEFAULT_POOL_SIZE=40
     ports:
-      # Пробрасываем 6432 порт наружу
-      - "6432:6432"
+      - "6432:5432"
     depends_on:
       db:
         condition: service_healthy
-
   db:
     image: postgres:15-alpine
     container_name: akyl_db
