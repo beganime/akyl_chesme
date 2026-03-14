@@ -72,20 +72,16 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0000}
       POSTGRES_DB: ${POSTGRES_DB:-chat}
-      # Переключаем авторизацию на md5 для совместимости с PgBouncer
       POSTGRES_HOST_AUTH_METHOD: md5 
-    ports:
-      - "5432:5432" 
+    # СТРОКИ С ports ЗДЕСЬ БОЛЬШЕ НЕТ!
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Добавляем флаг password_encryption=md5
     command: ["postgres", "-c", "wal_level=logical", "-c", "password_encryption=md5"] 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: akyl_redis
