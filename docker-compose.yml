@@ -6,17 +6,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - SERVER_REGION=RU
-      - POSTGRES_SERVER=db
-      # ИСПРАВЛЕНО: бэкенд внутри сети Docker стучится на 5432
-      - POSTGRES_PORT=5432 
-      - REDIS_HOST=redis
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      # Позволяет динамически задавать регион сервера
+      - SERVER_REGION=${SERVER_REGION:-RU} 
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -28,13 +22,7 @@ services:
     restart: always
     command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q main-queue
     environment:
-      - SERVER_REGION=RU
-      # Временно подключаемся напрямую к Postgres: PgBouncer в текущей конфигурации
-      # отдаёт "bouncer config error" и роняет регистрацию (500).
-      - POSTGRES_SERVER=db
-      # Бэкенд внутри сети Docker подключается напрямую к Postgres
-      - POSTGRES_PORT=5432
-      - REDIS_HOST=redis
+      - SERVER_REGION=${SERVER_REGION:-RU}
       - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/ 
     env_file:
       - .env
@@ -43,48 +31,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db:
-        condition: service_healthy
 
-  pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: akyl_pgbouncer
-    restart: always
-    environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:-postgres}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-0000}
-      - DB_NAME=${POSTGRES_DB:-chat}
-      - POOL_MODE=transaction
-      - MAX_CLIENT_CONN=10000
-      - DEFAULT_POOL_SIZE=40
-      - IGNORE_STARTUP_PARAMETERS=extra_float_digits
-    ports:
-      # Наружу отдаем 6432, чтобы ты мог подключиться через DBeaver, а внутри он 5432
-      - "6432:5432"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: postgres:15-alpine
-    container_name: akyl_db
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-0000}
-      POSTGRES_DB: ${POSTGRES_DB:-chat}
-      POSTGRES_HOST_AUTH_METHOD: md5 
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    command: ["postgres", "-c", "wal_level=logical", "-c", "password_encryption=md5"] 
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
+  # Redis оставляем ЛОКАЛЬНЫМ на каждом сервере. 
+  # Он нужен для сверхбыстрого кэша сессий и управления вебсокетами конкретного узла.
   redis:
     image: redis:7-alpine
     container_name: akyl_redis
@@ -100,6 +49,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # Межсерверная шина для передачи сообщений чата между РФ и ТКМ серверами
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: akyl_rabbitmq
@@ -116,6 +66,5 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
   redis_data:
   rabbitmq_data:

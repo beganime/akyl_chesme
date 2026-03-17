@@ -14,24 +14,30 @@ class Settings(BaseSettings):
     
     SERVER_REGION: str = "LOCAL"
     
+    # Настройки облачного кластера PostgreSQL
     POSTGRES_SERVER: str
-    POSTGRES_PORT: int = 5432
+    POSTGRES_PORT: int = 6432        # Порт Managed PgBouncer (от Reg.ru)
+    POSTGRES_DIRECT_PORT: int = 5432 # Прямой порт для миграций Alembic
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
+    POSTGRES_SSL_REQUIRE: bool = True # Обязательно для передачи данных через интернет
     
     @property
     def DATABASE_URL(self) -> str:
-        """URL для самого приложения (пойдет через PgBouncer, если POSTGRES_PORT=6432)"""
-        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        """URL для самого приложения (пойдет через облачный PgBouncer)"""
+        url = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        if self.POSTGRES_SSL_REQUIRE:
+            url += "?ssl=require"
+        return url
 
     @property
     def DIRECT_DATABASE_URL(self) -> str:
-        """URL для Alembic (всегда напрямую в БД, минуя PgBouncer)"""
-        # Если сервер указан как pgbouncer, значит база живет в контейнере 'db' на порту 5432
-        host = "db" if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_SERVER
-        port = 5432 if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_PORT
-        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{host}:{port}/{self.POSTGRES_DB}"
+        """URL для Alembic (всегда напрямую в БД, минуя пулер)"""
+        url = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_DIRECT_PORT}/{self.POSTGRES_DB}"
+        if self.POSTGRES_SSL_REQUIRE:
+            url += "?ssl=require"
+        return url
 
     REDIS_HOST: str
     REDIS_PORT: int = 6379
