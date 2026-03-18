@@ -1,14 +1,22 @@
-# app/core/config.py
-import secrets
-from typing import Any, Union
-from pydantic import AnyHttpUrl, field_validator
-from pydantic_settings import BaseSettings
+from typing import Annotated, Any
+from pydantic import AnyHttpUrl, BeforeValidator, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Валидатор для CORS, адаптированный под Pydantic V2
+def parse_cors(v: Any) -> list[str] | str:
+    if isinstance(v, str) and not v.startswith("["):
+        return [i.strip() for i in v.split(",")]
+    elif isinstance(v, (list, str)):
+        return v
+    raise ValueError(v)
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Akyl Chesme"
     
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    # Секретный ключ должен быть статичным и храниться в .env
+    # Сгенерируй его один раз через `openssl rand -hex 32` и положи в .env
+    SECRET_KEY: str 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
@@ -21,8 +29,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    POSTGRES_SSL_REQUIRE: bool = True # Обязательно для передачи данных через интернет
-    
+    POSTGRES_SSL_REQUIRE: bool = True 
+
+    @computed_field
     @property
     def DATABASE_URL(self) -> str:
         """URL для самого приложения (пойдет через облачный PgBouncer)"""
@@ -31,6 +40,7 @@ class Settings(BaseSettings):
             url += "?ssl=require"
         return url
 
+    @computed_field
     @property
     def DIRECT_DATABASE_URL(self) -> str:
         """URL для Alembic (всегда напрямую в БД, минуя пулер)"""
@@ -43,6 +53,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     
+    @computed_field
     @property
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
@@ -55,21 +66,14 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str | None = None
     S3_BUCKET_NAME: str = "akyl-chesme-media"
     
-    BACKEND_CORS_ORIGINS: list[AnyHttpUrl] = []
+    BACKEND_CORS_ORIGINS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = []
     FIREBASE_CREDENTIALS_PATH: str | None = None
 
-    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v: Union[str, list[str]]) -> Union[list[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
-
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
-        extra = "ignore"
+    # Pydantic V2 конфигурация
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        env_ignore_empty=True, 
+        extra="ignore"
+    )
 
 settings = Settings()
