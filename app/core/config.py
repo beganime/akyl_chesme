@@ -1,8 +1,9 @@
-from typing import Annotated, Any
+import secrets
+from typing import Any, Union, List
 from pydantic import AnyHttpUrl, BeforeValidator, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
 
-# Валидатор для CORS, адаптированный под Pydantic V2
 def parse_cors(v: Any) -> list[str] | str:
     if isinstance(v, str) and not v.startswith("["):
         return [i.strip() for i in v.split(",")]
@@ -14,40 +15,32 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Akyl Chesme"
     
-    # Секретный ключ должен быть статичным и храниться в .env
-    # Сгенерируй его один раз через `openssl rand -hex 32` и положи в .env
-    SECRET_KEY: str 
+    SECRET_KEY: str = secrets.token_urlsafe(32)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     SERVER_REGION: str = "LOCAL"
     
-    # Настройки облачного кластера PostgreSQL
+    # === НОВОЕ: Ключ для внутреннего моста между микросервисами ===
+    INTERNAL_API_KEY: str = "akyl_super_secret_internal_bridge_key_123!"
+    
     POSTGRES_SERVER: str
-    POSTGRES_PORT: int = 6432        # Порт Managed PgBouncer (от Reg.ru)
-    POSTGRES_DIRECT_PORT: int = 5432 # Прямой порт для миграций Alembic
+    POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    POSTGRES_SSL_REQUIRE: bool = True 
-
+    
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
-        """URL для самого приложения (пойдет через облачный PgBouncer)"""
-        url = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        if self.POSTGRES_SSL_REQUIRE:
-            url += "?ssl=require"
-        return url
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @computed_field
     @property
     def DIRECT_DATABASE_URL(self) -> str:
-        """URL для Alembic (всегда напрямую в БД, минуя пулер)"""
-        url = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_DIRECT_PORT}/{self.POSTGRES_DB}"
-        if self.POSTGRES_SSL_REQUIRE:
-            url += "?ssl=require"
-        return url
+        host = "db" if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_SERVER
+        port = 5432 if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_PORT
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{host}:{port}/{self.POSTGRES_DB}"
 
     REDIS_HOST: str
     REDIS_PORT: int = 6379
@@ -69,7 +62,6 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = []
     FIREBASE_CREDENTIALS_PATH: str | None = None
 
-    # Pydantic V2 конфигурация
     model_config = SettingsConfigDict(
         env_file=".env", 
         env_ignore_empty=True, 
