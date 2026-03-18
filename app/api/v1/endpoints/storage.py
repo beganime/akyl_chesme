@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.get("/presigned-url")
 async def get_presigned_url(
-    filename: str = Query(..., description="Имя файла, например: photo.jpg"),
+    filename: str = Query(..., min_length=3, max_length=255, description="Имя файла, например: photo.jpg"),
     current_user: User = Depends(get_current_user)
 ):
     """

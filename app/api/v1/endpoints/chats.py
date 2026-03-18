@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import desc, and_
+from sqlalchemy import and_, desc, func
 from typing import List
 
 from app.db.session import get_db
@@ -26,6 +26,23 @@ async def create_chat(
         if chat_in.target_user_id == current_user.id:
             raise HTTPException(status_code=400, detail="Cannot create dialog with yourself")
             
+        target_stmt = select(User).where(User.id == chat_in.target_user_id)
+        target_user = (await db.execute(target_stmt)).scalars().first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Target user not found")
+
+        existing_dialog_stmt = (
+            select(Chat.id)
+            .join(ChatMember, ChatMember.chat_id == Chat.id)
+            .where(Chat.type == ChatType.dialog, ChatMember.user_id.in_([current_user.id, chat_in.target_user_id]))
+            .group_by(Chat.id)
+            .having(func.count(ChatMember.user_id) == 2)
+        )
+        existing_chat_id = (await db.execute(existing_dialog_stmt)).scalars().first()
+        if existing_chat_id:
+            existing_chat = (await db.execute(select(Chat).where(Chat.id == existing_chat_id))).scalars().first()
+            return existing_chat
+
         # Создаем сам чат
         new_chat = Chat(type=ChatType.dialog)
         db.add(new_chat)
