@@ -23,11 +23,12 @@ class UserUpdate(BaseModel):
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == user_in.username))
+    normalized_username = user_in.username.strip().lower()
+    result = await db.execute(select(User).where(User.username == normalized_username))
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Username already exists.")
     
-    db_user = User(username=user_in.username, name=user_in.name)
+    db_user = User(username=normalized_username, name=user_in.name)
     db_user.set_password(user_in.password)
     db.add(db_user)
     await db.commit()

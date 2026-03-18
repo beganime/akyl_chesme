@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
@@ -107,8 +108,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = Depends(get_ws
                             
                             receivers_ids = [m_id for m_id in chat_members if m_id != user_id]
                             
-                            for member_id in receivers_ids:
-                                await manager.send_personal_message(broadcast_payload, member_id)
+                            if receivers_ids:
+                                await asyncio.gather(*(
+                                    manager.send_personal_message(broadcast_payload, member_id)
+                                    for member_id in receivers_ids
+                                ))
 
                             if receivers_ids:
                                 sender_stmt = select(User.name, User.username).where(User.id == user_id)
