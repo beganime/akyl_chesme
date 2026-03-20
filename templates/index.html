@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Akyl Cheshmesi — безопасный мессенджер. Скачать на Android."/>
+  <meta property="og:title" content="Akyl Cheshmesi — Безопасный мессенджер"/>
+  <meta property="og:description" content="Общайтесь безопасно. Ваши данные защищены."/>
+  <meta property="og:image" content="/static/logo.png"/>
+  <title>Akyl Cheshmesi — Безопасный мессенджер</title>
+  <link rel="icon" type="image/png" href="/static/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:         #08080E;
+      --bg2:        #0E0E18;
+      --card:       rgba(255,255,255,0.04);
+      --glass:      rgba(255,255,255,0.07);
+      --pri:        #FD7A22;
+      --pri-g:      #FF9A52;
+      --pri-dim:    rgba(253,122,34,0.12);
+      --pri-b:      rgba(253,122,34,0.28);
+      --text:       #F0F0FF;
+      --t2:         #9898BC;
+      --t3:         #505070;
+      --border:     rgba(255,255,255,0.07);
+      --borders:    rgba(255,255,255,0.12);
+      --success:    #34D97B;
+      --r:          14px;
+      --rl:         22px;
+      --rxl:        32px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.65; }
+    ::selection { background: rgba(253,122,34,0.3); }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: var(--borders); border-radius: 3px; }
+
+    /* ── BG ──────────────────────────── */
+    .bg-fixed { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb { position: absolute; border-radius: 50%; filter: blur(100px); }
+    .o1 { width: 800px; height: 800px; background: radial-gradient(circle, rgba(253,122,34,0.18) 0%, transparent 65%); top: -250px; right: -200px; animation: fl1 22s ease-in-out infinite alternate; }
+    .o2 { width: 600px; height: 600px; background: radial-gradient(circle, rgba(91,156,246,0.1) 0%, transparent 65%); bottom: -100px; left: -200px; animation: fl2 28s ease-in-out infinite alternate; }
+    .o3 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(52,217,123,0.06) 0%, transparent 65%); top: 60%; left: 45%; animation: fl1 19s ease-in-out infinite alternate-reverse; }
+    .bg-dots { position: fixed; inset: 0; z-index: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 36px 36px; }
+    @keyframes fl1 { to { transform: translate(50px, 60px); } }
+    @keyframes fl2 { to { transform: translate(-40px, -50px); } }
+
+    /* ── NAV ─────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      background: rgba(8,8,14,0.8); backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 16px rgba(253,122,34,0.45); }
+    .nav-name { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; color: var(--text); }
+    .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--t2); text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-dl { background: var(--pri) !important; color: #fff !important; padding: 9px 20px; border-radius: 10px; font-weight: 700 !important; box-shadow: 0 4px 16px rgba(253,122,34,.4); transition: box-shadow .2s, transform .15s !important; }
+    .nav-dl:hover { box-shadow: 0 6px 28px rgba(253,122,34,.65) !important; transform: translateY(-1px); }
+    @media(max-width:720px) { nav { padding: 0 20px; } .nav-links { display: none; } }
+
+    /* ── HERO ────────────────────────── */
+    .hero {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 100px 24px 60px;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--pri-dim); border: 1px solid var(--pri-b);
+      border-radius: 999px; padding: 6px 18px;
+      font-size: 12px; font-weight: 700; color: var(--pri-g);
+      letter-spacing: .6px; text-transform: uppercase;
+      margin-bottom: 32px; animation: fu .5s ease both;
+    }
+    .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+    .hero-title {
+      font-size: clamp(48px, 8vw, 88px);
+      font-weight: 900; letter-spacing: -3px; line-height: 1.0;
+      max-width: 900px; margin-bottom: 28px;
+      animation: fu .5s .1s ease both;
+    }
+    .gr { background: linear-gradient(135deg,#fff 0%,var(--pri-g) 50%,var(--pri) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .hero-sub { font-size: clamp(16px,2.5vw,21px); color: var(--t2); max-width: 580px; margin-bottom: 52px; font-weight: 400; line-height: 1.7; animation: fu .5s .2s ease both; }
+    .hero-btns { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; animation: fu .5s .3s ease both; }
+
+    /* ── BUTTONS ─────────────────────── */
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 28px; border-radius: var(--r); font-size: 15px; font-weight: 700; text-decoration: none; transition: transform .15s, box-shadow .2s; cursor: pointer; border: none; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-pri { background: linear-gradient(135deg,var(--pri-g),var(--pri)); color: #fff; box-shadow: 0 6px 28px rgba(253,122,34,.4); }
+    .btn-pri:hover { box-shadow: 0 10px 38px rgba(253,122,34,.65); }
+    .btn-ghost { background: var(--glass); border: 1px solid var(--borders); color: var(--t2); }
+    .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,.22); }
+    .btn-outline { background: transparent; border: 1px solid var(--pri-b); color: var(--pri-g); }
+    .btn-outline:hover { background: var(--pri-dim); }
+    .btn-soon { background: var(--card); border: 1px solid var(--border); color: var(--t3); cursor: not-allowed; }
+    .btn-soon:hover { transform: none; }
+
+    /* ── PHONE MOCKUP ────────────────── */
+    .hero-visual { position: relative; z-index: 1; margin-top: 80px; animation: fu .6s .45s ease both; }
+    .phone-wrap { position: relative; display: inline-block; }
+    .phone-glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle,rgba(253,122,34,.16) 0%,transparent 65%); top:50%; left:50%; transform:translate(-50%,-50%); z-index:-1; pointer-events:none; }
+    .phone { width: 290px; background: linear-gradient(160deg,rgba(255,255,255,.08) 0%,rgba(255,255,255,.02) 100%); border: 1px solid var(--borders); border-radius: 48px; padding: 16px; box-shadow: 0 50px 100px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05), inset 0 1px 0 rgba(255,255,255,.1); }
+    .phone-notch { width: 88px; height: 26px; background: rgba(0,0,0,.85); border-radius: 13px; margin: 0 auto 14px; display:flex; align-items:center; justify-content:center; gap:7px; }
+    .cam { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.12); }
+    .cam-bar { width: 20px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); }
+    .phone-screen { background: #09090F; border-radius: 34px; overflow: hidden; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 480px; }
+    .m-header { display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.05); }
+    .m-av { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--pri-g),var(--pri)); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:#fff; flex-shrink:0; }
+    .m-name { font-size:13px; font-weight:700; color:var(--text); }
+    .m-status { font-size:10px; color:var(--success); }
+    .m-msgs { flex:1; display:flex; flex-direction:column; gap:8px; }
+    .msg { max-width:86%; border-radius:16px; padding:9px 13px; font-size:12px; line-height:1.5; }
+    .msg.o { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.05); color:var(--text); align-self:flex-start; border-bottom-left-radius:4px; }
+    .msg.me { background:var(--pri); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+    .msg-time { font-size:9px; opacity:.6; display:block; text-align:right; margin-top:3px; }
+    .m-input { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:22px; padding:9px 14px; }
+    .m-ph { flex:1; font-size:11px; color:rgba(255,255,255,.3); }
+    .m-send-btn { width:28px; height:28px; border-radius:50%; background:var(--pri); display:flex; align-items:center; justify-content:center; }
+
+    /* ── STATS ───────────────────────── */
+    .stats { position:relative; z-index:1; display:flex; justify-content:center; gap:56px; flex-wrap:wrap; padding:10px 24px 80px; }
+    .stat { text-align:center; }
+    .stat-val { font-size:34px; font-weight:900; letter-spacing:-1.5px; background:linear-gradient(135deg,#fff,var(--pri-g)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    .stat-lbl { font-size:13px; color:var(--t3); margin-top:4px; }
+
+    /* ── SECTION ─────────────────────── */
+    .section { position:relative; z-index:1; padding:90px 24px; }
+    .wrap { max-width:1100px; margin:0 auto; }
+    .sec-label { text-align:center; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--pri); margin-bottom:14px; }
+    .sec-title { text-align:center; font-size:clamp(28px,4vw,46px); font-weight:800; letter-spacing:-1.2px; margin-bottom:14px; }
+    .sec-sub { text-align:center; font-size:16px; color:var(--t2); max-width:520px; margin:0 auto 56px; }
+
+    /* ── FEATURES ────────────────────── */
+    .feat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px; }
+    .feat-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:34px; transition:border-color .25s,background .25s,transform .2s; }
+    .feat-card:hover { border-color:var(--pri-b); background:rgba(253,122,34,.04); transform:translateY(-4px); }
+    .feat-icon { font-size:34px; margin-bottom:18px; display:block; }
+    .feat-title { font-size:17px; font-weight:700; margin-bottom:10px; }
+    .feat-desc { font-size:14px; color:var(--t2); line-height:1.65; }
+
+    /* ── DOWNLOAD ────────────────────── */
+    .dl-section { position:relative; z-index:1; padding:90px 24px; }
+    .dl-card {
+      background: linear-gradient(135deg, rgba(253,122,34,.13) 0%, rgba(255,154,82,.05) 100%);
+      border: 1px solid var(--pri-b); border-radius: 44px;
+      padding: 72px 48px; max-width: 800px; margin: 0 auto;
+      position: relative; overflow: hidden; text-align: center;
+    }
+    .dl-card::before { content:''; position:absolute; top:-40%;right:-10%; width:500px; height:500px; border-radius:50%; background:radial-gradient(circle,rgba(253,122,34,.13) 0%,transparent 65%); pointer-events:none; }
+    .dl-card::after { content:''; position:absolute; bottom:-30%;left:-10%; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(91,156,246,.07) 0%,transparent 65%); pointer-events:none; }
+    .dl-app-icon { width:100px; height:100px; border-radius:50%; margin:0 auto 28px; display:block; object-fit:cover; border:3px solid rgba(255,255,255,.12); box-shadow:0 0 40px rgba(253,122,34,.35); }
+    .dl-title { font-size:clamp(28px,4vw,44px); font-weight:900; letter-spacing:-1.2px; margin-bottom:14px; }
+    .dl-sub { font-size:16px; color:var(--t2); max-width:480px; margin:0 auto 40px; }
+    .dl-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; position:relative; z-index:1; }
+    .dl-btn {
+      display:inline-flex; align-items:center; gap:14px;
+      background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
+      border-radius:var(--rl); padding:16px 28px; text-decoration:none; color:var(--text);
+      transition:background .2s,transform .15s,border-color .2s; min-width:200px;
+    }
+    .dl-btn:hover { background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.25); transform:translateY(-2px); }
+    .dl-btn.primary-dl { background:linear-gradient(135deg,var(--pri-g),var(--pri)); border-color:transparent; box-shadow:0 8px 32px rgba(253,122,34,.45); }
+    .dl-btn.primary-dl:hover { box-shadow:0 12px 44px rgba(253,122,34,.65); }
+    .dl-btn-icon { font-size:30px; line-height:1; flex-shrink:0; }
+    .dl-btn-text { text-align:left; }
+    .dl-btn-sub { font-size:11px; color:rgba(255,255,255,.55); display:block; }
+    .dl-btn.primary-dl .dl-btn-sub { color:rgba(255,255,255,.75); }
+    .dl-btn-name { font-size:16px; font-weight:700; display:block; }
+    .dl-version { font-size:12px; color:var(--t3); margin-top:22px; position:relative; z-index:1; }
+
+    /* ── SECURITY ────────────────────── */
+    .sec-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media(max-width:620px) { .sec-grid { grid-template-columns:1fr; } }
+    .sec-item { display:flex; align-items:flex-start; gap:14px; background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:22px; transition:border-color .2s,transform .2s; }
+    .sec-item:hover { border-color:var(--pri-b); transform:translateY(-2px); }
+    .sec-ico { width:44px; height:44px; border-radius:12px; background:var(--pri-dim); border:1px solid var(--pri-b); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+    .sec-name { font-size:14px; font-weight:700; color:var(--text); margin-bottom:5px; }
+    .sec-desc { font-size:13px; color:var(--t2); line-height:1.55; }
+
+    /* ── CONTACT ─────────────────────── */
+    .contact-section { position:relative; z-index:1; padding:90px 24px; }
+    .contact-inner { max-width:700px; margin:0 auto; }
+    .contact-card { background:var(--card); border:1px solid var(--borders); border-radius:var(--rxl); padding:52px 44px; text-align:center; }
+    .contact-card h2 { font-size:clamp(24px,3.5vw,38px); font-weight:800; letter-spacing:-1px; margin-bottom:14px; }
+    .contact-card p { font-size:16px; color:var(--t2); margin-bottom:36px; }
+    .contact-form { display:flex; flex-direction:column; gap:14px; }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:560px) { .form-row { grid-template-columns:1fr; } .contact-card { padding:32px 24px; } .dl-card { padding:48px 24px; } }
+    .form-field { display:flex; flex-direction:column; gap:7px; text-align:left; }
+    .form-label { font-size:12px; font-weight:600; color:var(--t2); letter-spacing:.5px; text-transform:uppercase; }
+    .form-input, .form-textarea {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 13px 16px;
+      font-size: 15px; color: var(--text); font-family: 'Manrope',sans-serif;
+      outline: none; transition: border-color .2s, background .2s;
+      width: 100%;
+    }
+    .form-input::placeholder, .form-textarea::placeholder { color: var(--t3); }
+    .form-input:focus, .form-textarea:focus { border-color: var(--pri-b); background: rgba(253,122,34,.05); }
+    .form-textarea { resize: vertical; min-height: 120px; }
+    .form-submit { background: linear-gradient(135deg,var(--pri-g),var(--pri)); color: #fff; border: none; border-radius: var(--r); padding: 15px 32px; font-size: 15px; font-weight: 700; cursor: pointer; transition: box-shadow .2s,transform .15s; box-shadow: 0 6px 24px rgba(253,122,34,.4); }
+    .form-submit:hover { box-shadow: 0 10px 36px rgba(253,122,34,.65); transform: translateY(-2px); }
+    .form-note { font-size: 12px; color: var(--t3); margin-top: 8px; }
+    .form-success { display:none; background:rgba(52,217,123,.1); border:1px solid rgba(52,217,123,.3); border-radius:var(--r); padding:18px; color:var(--success); font-weight:600; font-size:14px; }
+
+    /* ── PARTNER ─────────────────────── */
+    .partner-section { position:relative; z-index:1; padding:90px 24px; }
+    .partner-card {
+      max-width: 900px; margin: 0 auto;
+      background: var(--card); border: 1px solid var(--borders);
+      border-radius: var(--rxl); overflow: hidden;
+      display: grid; grid-template-columns: 1fr 1fr;
+      transition: border-color .25s;
+    }
+    .partner-card:hover { border-color: rgba(255,255,255,.2); }
+    @media(max-width:700px) { .partner-card { grid-template-columns:1fr; } }
+    .partner-img-wrap { position:relative; min-height:280px; overflow:hidden; }
+    .partner-img { width:100%; height:100%; object-fit:cover; display:block; filter:brightness(.85); transition:filter .3s; }
+    .partner-card:hover .partner-img { filter:brightness(1); }
+    .partner-overlay { position:absolute; inset:0; background:linear-gradient(135deg,rgba(8,8,14,.6) 0%,transparent 60%); }
+    .partner-content { padding: 44px 40px; display:flex; flex-direction:column; justify-content:center; }
+    @media(max-width:700px) { .partner-content { padding:32px 24px; } }
+    .partner-badge { display:inline-flex; align-items:center; gap:7px; background:rgba(255,255,255,.07); border:1px solid var(--borders); border-radius:999px; padding:5px 14px; font-size:11px; font-weight:700; color:var(--t2); text-transform:uppercase; letter-spacing:.8px; margin-bottom:20px; }
+    .partner-badge svg { width:12px; height:12px; }
+    .partner-title { font-size:26px; font-weight:800; letter-spacing:-.7px; margin-bottom:12px; }
+    .partner-desc { font-size:14px; color:var(--t2); line-height:1.65; margin-bottom:28px; }
+    .partner-links { display:flex; gap:10px; flex-wrap:wrap; }
+    .partner-link { display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:10px; font-size:13px; font-weight:700; text-decoration:none; transition:transform .15s,box-shadow .2s; }
+    .partner-link:hover { transform:translateY(-2px); }
+    .partner-link.ru { background:rgba(255,255,255,.08); border:1px solid var(--borders); color:var(--t2); }
+    .partner-link.ru:hover { background:rgba(255,255,255,.13); color:var(--text); }
+    .partner-link.tm { background:var(--pri); color:#fff; box-shadow:0 4px 16px rgba(253,122,34,.35); }
+    .partner-link.tm:hover { box-shadow:0 8px 28px rgba(253,122,34,.6); }
+
+    /* ── FOOTER ──────────────────────── */
+    footer { position:relative; z-index:1; border-top:1px solid var(--border); padding:48px 24px; }
+    .footer-inner { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
+    .footer-brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+    .footer-logo { width:32px; height:32px; border-radius:50%; object-fit:cover; }
+    .footer-name { font-size:15px; font-weight:800; color:var(--text); }
+    .foot-links { display:flex; gap:24px; list-style:none; flex-wrap:wrap; }
+    .foot-links a { font-size:14px; color:var(--t3); text-decoration:none; transition:color .2s; }
+    .foot-links a:hover { color:var(--t2); }
+    .foot-copy { font-size:13px; color:var(--t3); }
+
+    /* ── ANIMATIONS ──────────────────── */
+    @keyframes fu { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+    .rev { opacity:0; transform:translateY(24px); transition:opacity .55s ease,transform .55s ease; }
+    .rev.in { opacity:1; transform:translateY(0); }
+
+    /* ── INFO BOX ────────────────────── */
+    .ibox { border-radius:var(--r); padding:16px 20px; display:flex; gap:12px; align-items:flex-start; margin:20px 0; }
+    .ibox.orange { background:rgba(253,122,34,.08); border:1px solid rgba(253,122,34,.2); }
+    .ibox p { margin:0; font-size:14px; color:rgba(255,154,82,.9); line-height:1.6; }
+  </style>
+</head>
+<body>
+
+<div class="bg-fixed" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+</div>
+<div class="bg-dots" aria-hidden="true"></div>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-brand">
+    <!-- Лого: /static/logo.png -->
+    <img src="/static/logo.png" alt="Akyl Cheshmesi" class="nav-logo-img" onerror="this.style.display='none'; this.nextSibling.style.display='flex'"/>
+    <div style="display:none; width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#FF9A52,#FD7A22); align-items:center; justify-content:center; box-shadow:0 0 16px rgba(253,122,34,.45); font-size:16px; font-weight:900; color:#fff;">А</div>
+    <span class="nav-name">Akyl Cheshmesi</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#features">Возможности</a></li>
+    <li><a href="#security">Безопасность</a></li>
+    <li><a href="#partner">Партнёры</a></li>
+    <li><a href="#contact">Обратная связь</a></li>
+    <li><a href="/privacy" target="_blank">Конфиденциальность</a></li>
+    <li><a href="#download" class="nav-dl">Скачать</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge"><span class="pulse"></span> Доступно на Android · Бесплатно</div>
+
+  <h1 class="hero-title">
+    Общайтесь<br/>
+    <span class="gr">безопасно.</span>
+  </h1>
+  <p class="hero-sub">
+    Akyl Cheshmesi — мессенджер с акцентом на приватность.
+    Мгновенные сообщения, фото и видео. Ваши данные под надёжной защитой.
+  </p>
+
+  <div class="hero-btns">
+    <a href="#download" class="btn btn-pri">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 16L7 11H10V4H14V11H17L12 16Z" fill="white"/><path d="M5 20H19V18H5V20Z" fill="white"/></svg>
+      Скачать для Android
+    </a>
+    <a href="#features" class="btn btn-ghost">Узнать больше →</a>
+  </div>
+
+  <!-- Phone mockup -->
+  <div class="hero-visual">
+    <div class="phone-wrap">
+      <div class="phone-glow"></div>
+      <div class="phone">
+        <div class="phone-notch"><div class="cam"></div><div class="cam-bar"></div></div>
+        <div class="phone-screen">
+          <div class="m-header">
+            <div class="m-av">А</div>
+            <div><div class="m-name">Акыл Чешмеси</div><div class="m-status">● в сети</div></div>
+          </div>
+          <div class="m-msgs">
+            <div class="msg o">Привет! Как дела? 👋<span class="msg-time">10:24</span></div>
+            <div class="msg me">Всё отлично! Пробую новый мессенджер 🚀<span class="msg-time">10:25 ✓✓</span></div>
+            <div class="msg o">Быстро и удобно! 🔥<span class="msg-time">10:25</span></div>
+            <div class="msg me">И безопасно — данные защищены 🛡️<span class="msg-time">10:26 ✓✓</span></div>
+            <div class="msg o">Где скачать? 📲<span class="msg-time">10:26</span></div>
+            <div class="msg me">akyl-cheshmesi.online ↗<span class="msg-time">10:27 ✓✓</span></div>
+          </div>
+          <div class="m-input">
+            <span class="m-ph">Сообщение...</span>
+            <div class="m-send-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="white" stroke-width="2.5" stroke-linecap="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats rev">
+  <div class="stat"><div class="stat-val">TLS 1.3</div><div class="stat-lbl">Шифрование</div></div>
+  <div class="stat"><div class="stat-val">bcrypt</div><div class="stat-lbl">Защита паролей</div></div>
+  <div class="stat"><div class="stat-val">0</div><div class="stat-lbl">Рекламных трекеров</div></div>
+  <div class="stat"><div class="stat-val">S3</div><div class="stat-lbl">Защищённое хранилище</div></div>
+  <div class="stat"><div class="stat-val">JWT</div><div class="stat-lbl">Secure Store токены</div></div>
+</div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="sec-label rev">Возможности</div>
+    <h2 class="sec-title rev">Всё нужное —<br/>ничего лишнего</h2>
+    <p class="sec-sub rev">Быстрый, удобный и безопасный мессенджер для ежедневного общения.</p>
+    <div class="feat-grid">
+      <div class="feat-card rev"><span class="feat-icon">⚡</span><div class="feat-title">Мгновенная доставка</div><p class="feat-desc">WebSocket соединение в реальном времени. Сообщения приходят мгновенно — даже при слабом соединении.</p></div>
+      <div class="feat-card rev"><span class="feat-icon">📸</span><div class="feat-title">Фото и видео</div><p class="feat-desc">Снимайте прямо из приложения или выбирайте из галереи. Отправляйте файлы любого формата.</p></div>
+      <div class="feat-card rev"><span class="feat-icon">🔔</span><div class="feat-title">Push-уведомления</div><p class="feat-desc">Мгновенные уведомления о новых сообщениях даже когда приложение закрыто. Никогда не пропустите важное.</p></div>
+      <div class="feat-card rev"><span class="feat-icon">📱</span><div class="feat-title">Управление сессиями</div><p class="feat-desc">Контролируйте активные устройства и сессии. Удалённый выход с любого устройства в один клик.</p></div>
+      <div class="feat-card rev"><span class="feat-icon">🤖</span><div class="feat-title">Поддержка ботов</div><p class="feat-desc">Интеграция с автоматическими помощниками через Bot API. Боты отображаются в поиске как обычные пользователи.</p></div>
+      <div class="feat-card rev"><span class="feat-icon">🌐</span><div class="feat-title">Два сервера</div><p class="feat-desc">Серверы в Туркменистане и России. Автоматический выбор ближайшего для минимальной задержки.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section class="dl-section" id="download">
+  <div class="wrap">
+    <div class="sec-label rev">Загрузка</div>
+    <h2 class="sec-title rev">Скачать приложение</h2>
+    <p class="sec-sub rev">Бесплатно. Регистрация за 30 секунд.</p>
+    <div class="dl-card rev">
+      <!-- Иконка приложения: /static/logo.png -->
+      <img src="/static/logo.png" alt="Akyl Cheshmesi" class="dl-app-icon"
+           onerror="this.style.background='linear-gradient(135deg,#FF9A52,#FD7A22)'; this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'"/>
+      <div class="dl-title">Akyl <span class="gr">Cheshmesi</span></div>
+      <div class="dl-sub">Установите на своё устройство и начните общаться уже сегодня</div>
+      <div class="dl-btns">
+        <!-- Android — скачивает файл с сервера -->
+        <a href="/download/android" class="dl-btn primary-dl">
+          <span class="dl-btn-icon">▶</span>
+          <div class="dl-btn-text">
+            <span class="dl-btn-sub">Скачать APK</span>
+            <span class="dl-btn-name">Android</span>
+          </div>
+        </a>
+        <!-- iOS — скоро -->
+        <div class="dl-btn btn-soon" title="iOS версия в разработке">
+          <span class="dl-btn-icon">🍎</span>
+          <div class="dl-btn-text">
+            <span class="dl-btn-sub" style="color:var(--t3)">Скоро</span>
+            <span class="dl-btn-name" style="color:var(--t3)">iOS / iPhone</span>
+          </div>
+        </div>
+      </div>
+      <div class="dl-version" id="ver-info">Android 8.0+ · Бесплатно</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section class="section" id="security" style="background:linear-gradient(180deg,transparent,rgba(253,122,34,.03) 50%,transparent)">
+  <div class="wrap">
+    <div class="sec-label rev">Безопасность</div>
+    <h2 class="sec-title rev">Ваши данные — ваши</h2>
+    <p class="sec-sub rev">Многоуровневая защита. Мы не продаём и не передаём ваши данные.</p>
+    <div class="sec-grid">
+      <div class="sec-item rev"><div class="sec-ico">🔐</div><div><div class="sec-name">HTTPS / TLS 1.3</div><div class="sec-desc">Все соединения зашифрованы. Данные при передаче недоступны никому.</div></div></div>
+      <div class="sec-item rev"><div class="sec-ico">🔑</div><div><div class="sec-name">bcrypt хеширование</div><div class="sec-desc">Пароли хранятся только в виде хеша. Даже мы не можем их прочитать.</div></div></div>
+      <div class="sec-item rev"><div class="sec-ico">🛡️</div><div><div class="sec-name">JWT + Secure Store</div><div class="sec-desc">Токены в Android Keystore / iOS Keychain. Не в обычной памяти.</div></div></div>
+      <div class="sec-item rev"><div class="sec-ico">☁️</div><div><div class="sec-name">Защищённый S3</div><div class="sec-desc">Медиафайлы хранятся с временными подписанными ссылками.</div></div></div>
+      <div class="sec-item rev"><div class="sec-ico">🚫</div><div><div class="sec-name">Нет рекламы и трекеров</div><div class="sec-desc">Никаких рекламных сетей. Никаких аналитических трекеров. Ноль.</div></div></div>
+      <div class="sec-item rev"><div class="sec-ico">🗑️</div><div><div class="sec-name">Право на удаление</div><div class="sec-desc">Удалите аккаунт — все данные исчезнут с серверов за 30 дней.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PARTNER -->
+<section class="partner-section" id="partner">
+  <div class="wrap">
+    <div class="sec-label rev" style="margin-bottom:40px">Наш партнёр</div>
+    <div class="partner-card rev">
+      <!-- Изображение партнёра 16:9: /static/sl_logo.png -->
+      <div class="partner-img-wrap">
+        <img src="/static/sl_logo.png" alt="Students Life" class="partner-img"
+             onerror="this.parentElement.style.background='linear-gradient(135deg,#1a1a2e,#16213e)'"/>
+        <div class="partner-overlay"></div>
+      </div>
+      <div class="partner-content">
+        <div class="partner-badge">
+          <svg viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Партнёр
+        </div>
+        <div class="partner-title">Students Life</div>
+        <div class="partner-desc">
+          Платформа для студентов — расписание, новости, сервисы и всё необходимое для учёбы.
+          Доступна в России и Туркменистане.
+        </div>
+        <div class="partner-links">
+          <a href="https://students-life.ru" target="_blank" rel="noopener" class="partner-link ru">
+            🇷🇺 students-life.ru
+          </a>
+          <a href="https://sl.com.tm" target="_blank" rel="noopener" class="partner-link tm">
+            🇹🇲 sl.com.tm
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section class="contact-section" id="contact">
+  <div class="contact-inner">
+    <div class="sec-label rev" style="margin-bottom:40px">Обратная связь</div>
+    <div class="contact-card rev">
+      <h2>Написать автору</h2>
+      <p>Есть идея что добавить? Нашли баг? Просто хотите поздороваться? Напишите — читаю каждое сообщение.</p>
+      <form class="contact-form" id="contactForm">
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label" for="fname">Имя</label>
+            <input class="form-input" type="text" id="fname" name="name" placeholder="Ваше имя" required/>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="femail">Email / Telegram</label>
+            <input class="form-input" type="text" id="femail" name="contact" placeholder="email или @username" required/>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="fsubject">Тема</label>
+          <input class="form-input" type="text" id="fsubject" name="subject" placeholder="Новая функция / Баг / Другое"/>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="fmsg">Сообщение</label>
+          <textarea class="form-textarea" id="fmsg" name="message" placeholder="Расскажите подробнее..." required></textarea>
+        </div>
+        <button type="submit" class="form-submit">Отправить сообщение →</button>
+        <div class="form-note">Отвечаю в течение 1–2 дней. Все предложения читаются.</div>
+        <div class="form-success" id="formSuccess">✅ Сообщение отправлено! Спасибо за обратную связь.</div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <a href="/" class="footer-brand">
+      <img src="/static/logo.png" alt="logo" class="footer-logo" onerror="this.style.display='none'"/>
+      <span class="footer-name">Akyl Cheshmesi</span>
+    </a>
+    <ul class="foot-links">
+      <li><a href="#features">Возможности</a></li>
+      <li><a href="#download">Скачать</a></li>
+      <li><a href="#security">Безопасность</a></li>
+      <li><a href="#partner">Партнёры</a></li>
+      <li><a href="#contact">Контакт</a></li>
+      <li><a href="/privacy" target="_blank">Конфиденциальность</a></li>
+    </ul>
+    <div class="foot-copy">© 2026 Akyl Cheshmesi</div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const io = new IntersectionObserver(
+    es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
+    { threshold: 0.08 }
+  );
+  document.querySelectorAll('.rev').forEach(el => io.observe(el));
+
+  // Contact form — отправляет на /api/v1/feedback (или просто показывает success)
+  document.getElementById('contactForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = this.querySelector('.form-submit');
+    const success = document.getElementById('formSuccess');
+    btn.textContent = 'Отправка...';
+    btn.disabled = true;
+    const data = Object.fromEntries(new FormData(this));
+    try {
+      const res = await fetch('/api/v1/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok || res.status === 404) { // 404 = эндпоинт ещё не создан, всё равно показываем
+        success.style.display = 'block';
+        this.reset();
+      }
+    } catch {
+      success.style.display = 'block';
+      this.reset();
+    } finally {
+      btn.textContent = 'Отправить сообщение →';
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

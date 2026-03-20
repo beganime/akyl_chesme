@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,5 +16,7 @@ class UserResponse(BaseModel):
     is_bot: bool
     name: Optional[str] = None
     avatar_url: Optional[str] = None
+    is_online: bool = False
+    last_seen: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

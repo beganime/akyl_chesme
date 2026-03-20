@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,7 @@ from app.models.user import User
 
 router = APIRouter()
 
+# Явный whitelist таблиц — только эти можно экспортировать
 ALLOWED_TABLES = {"users", "messages", "chats", "chat_members", "device_sessions"}
 
 
@@ -31,13 +33,28 @@ async def export_table_data(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(check_admin_access),
 ):
+    # 1. Whitelist проверка
     if table_name not in ALLOWED_TABLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Export for table '{table_name}' is not allowed.",
         )
 
-    query = text(f"SELECT * FROM {table_name} ORDER BY created_at ASC LIMIT :limit OFFSET :offset")
+    # 2. Дополнительная защита от SQL injection — только строчные буквы и _
+    # Это защита от unicode bypass и других хитростей
+    if not re.fullmatch(r'[a-z_]+', table_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid table name format.",
+        )
+
+    # 3. Безопасный запрос — table_name уже проверен дважды
+    # Используем SQLAlchemy text() только с проверенным именем таблицы
+    safe_table = table_name  # Безопасно после двух проверок выше
+    query = text(
+        f"SELECT * FROM {safe_table} ORDER BY created_at ASC LIMIT :limit OFFSET :offset"  # noqa: S608
+    )
+
     result = await db.execute(query, {"limit": limit, "offset": offset})
     rows = result.mappings().all()
 
@@ -52,7 +69,6 @@ async def export_table_data(
         yield output.getvalue()
         output.seek(0)
         output.truncate(0)
-
         for row in rows:
             writer.writerow(row.values())
             yield output.getvalue()
@@ -62,5 +78,7 @@ async def export_table_data(
     return StreamingResponse(
         iter_csv(),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={table_name}_export_{offset}.csv"},
+        headers={
+            "Content-Disposition": f"attachment; filename={safe_table}_export_{offset}.csv"
+        },
     )
