@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
+    # Добавляем настройку для SSL (по умолчанию False для локальной разработки)
+    POSTGRES_SSL_REQUIRE: bool = False
 
     @computed_field
     @property
@@ -45,12 +47,8 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DIRECT_DATABASE_URL(self) -> str:
-        host = "db" if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_SERVER
-        port = 5432 if self.POSTGRES_SERVER == "pgbouncer" else self.POSTGRES_PORT
-        return (
-            "postgresql+asyncpg://"
-            f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{host}:{port}/{self.POSTGRES_DB}"
-        )
+        # Облачная БД не использует локальный pgbouncer-контейнер, поэтому URL единый
+        return self.DATABASE_URL
 
     REDIS_HOST: str
     REDIS_PORT: int = 6379
