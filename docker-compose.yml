@@ -1,13 +1,18 @@
+version: "3.9"
+
 services:
+  # ── Backend API ────────────────────────────────────────────────────────────
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: akyl_backend
-    restart: always
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      # Позволяет динамически задавать регион сервера
-      - SERVER_REGION=${SERVER_REGION:-RU} 
+      - SERVER_REGION=${SERVER_REGION:-RU}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     env_file:
       - .env
     depends_on:
@@ -15,15 +20,41 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
+  # ── Celery Worker ──────────────────────────────────────────────────────────
   celery_worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: akyl_celery
-    restart: always
-    command: celery -A app.core.celery_app.celery_app worker --loglevel=info -Q main-queue
+    restart: unless-stopped
+    command: >
+      celery -A app.core.celery_app.celery_app worker
+      --loglevel=info
+      -Q main-queue
+      --concurrency=4
+      --max-tasks-per-child=1000
     environment:
       - SERVER_REGION=${SERVER_REGION:-RU}
-      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/ 
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
     env_file:
       - .env
     depends_on:
@@ -31,16 +62,52 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
-  # Redis оставляем ЛОКАЛЬНЫМ на каждом сервере. 
-  # Он нужен для сверхбыстрого кэша сессий и управления вебсокетами конкретного узла.
+  # ── Celery Beat (планировщик) ──────────────────────────────────────────────
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: akyl_beat
+    restart: unless-stopped
+    command: >
+      celery -A app.core.celery_app.celery_app beat
+      --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: akyl_redis
-    restart: always
+    restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
+      - "127.0.0.1:6379:6379"  # Только localhost
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
     volumes:
       - redis_data:/data
     healthcheck:
@@ -48,22 +115,33 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 300M
 
-  # Межсерверная шина для передачи сообщений чата между РФ и ТКМ серверами
+  # ── RabbitMQ ───────────────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: akyl_rabbitmq
-    restart: always
+    restart: unless-stopped
     ports:
-      - "5672:5672"   
-      - "15672:15672" 
+      - "127.0.0.1:5672:5672"    # Только localhost
+      - "127.0.0.1:15672:15672"  # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-akyl}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-akyl_secret}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 10s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
 volumes:
   redis_data:

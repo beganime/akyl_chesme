@@ -1,3 +1,5 @@
+# app/api/v1/endpoints/chats.py
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -9,41 +11,41 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.chat import Chat, ChatMember, ChatType
 from app.models.message import Message, Attachment
-from app.schemas.chat import ChatCreate, ChatResponse, MessageResponse, UserBriefResponse, AttachmentResponse
+from app.schemas.chat import ChatCreate, ChatResponse, MessageResponse
 from app.api.deps import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-async def build_chat_response(chat: Chat, current_user_id: str, db: AsyncSession) -> Dict[str, Any]:
-    """Собирает полный ответ чата: участники, последнее сообщение, unread_count."""
+async def build_chat_response(
+    chat: Chat,
+    current_user_id: str,
+    db: AsyncSession,
+) -> Dict[str, Any]:
+    """Строим полный ответ чата — оптимизировано через join."""
 
-    # Участники чата с их данными
+    # Участники одним запросом
     members_stmt = (
         select(User)
         .join(ChatMember, ChatMember.user_id == User.id)
         .where(ChatMember.chat_id == chat.id)
     )
-    members_result = await db.execute(members_stmt)
-    members = members_result.scalars().all()
+    members = (await db.execute(members_stmt)).scalars().all()
 
-    # Последнее сообщение
+    # Последнее сообщение + вложения одним запросом
     last_msg_stmt = (
         select(Message)
         .where(Message.chat_id == chat.id)
         .order_by(desc(Message.created_at))
         .limit(1)
+        .options(selectinload(Message.attachments))
     )
     last_msg = (await db.execute(last_msg_stmt)).scalars().first()
 
     last_message_data = None
     if last_msg:
-        # Sender последнего сообщения
         sender = next((m for m in members if m.id == last_msg.sender_id), None)
-        # Вложения последнего сообщения
-        attachments_stmt = select(Attachment).where(Attachment.message_id == last_msg.id)
-        attachments = (await db.execute(attachments_stmt)).scalars().all()
-
         last_message_data = {
             "id": last_msg.id,
             "chat_id": last_msg.chat_id,
@@ -51,65 +53,69 @@ async def build_chat_response(chat: Chat, current_user_id: str, db: AsyncSession
             "text": last_msg.text,
             "created_at": last_msg.created_at,
             "sender": {
-                "id": sender.id,
-                "username": sender.username,
-                "name": sender.name,
-                "avatar_url": sender.avatar_url,
+                "id": sender.id, "username": sender.username,
+                "name": sender.name, "avatar_url": sender.avatar_url,
                 "is_online": sender.is_online or False,
                 "is_bot": sender.is_bot,
             } if sender else None,
             "attachments": [
                 {"file_url": a.file_url, "file_type": a.file_type, "file_size": a.file_size}
-                for a in attachments
+                for a in last_msg.attachments
             ],
         }
 
-    # Unread count: сообщения после last_read_msg текущего пользователя
+    # Unread count
     member_record_stmt = select(ChatMember).where(
         and_(ChatMember.chat_id == chat.id, ChatMember.user_id == current_user_id)
     )
     member_record = (await db.execute(member_record_stmt)).scalars().first()
 
     unread_count = 0
-    if member_record and member_record.last_read_msg:
-        # Считаем сообщения после прочитанного
-        last_read_time_stmt = select(Message.created_at).where(Message.id == member_record.last_read_msg)
-        last_read_time = (await db.execute(last_read_time_stmt)).scalar()
-        if last_read_time:
-            unread_stmt = select(func.count()).where(
-                and_(
-                    Message.chat_id == chat.id,
-                    Message.created_at > last_read_time,
-                    Message.sender_id != current_user_id,
-                )
+    if member_record:
+        if member_record.last_read_msg:
+            last_read_time_stmt = select(Message.created_at).where(
+                Message.id == member_record.last_read_msg
             )
-            unread_count = (await db.execute(unread_stmt)).scalar() or 0
-    elif member_record and not member_record.last_read_msg:
-        # Ни одного сообщения не читали — все непрочитаны
-        count_stmt = select(func.count()).where(
-            and_(Message.chat_id == chat.id, Message.sender_id != current_user_id)
-        )
-        unread_count = (await db.execute(count_stmt)).scalar() or 0
+            last_read_time = (await db.execute(last_read_time_stmt)).scalar()
+            if last_read_time:
+                unread_stmt = select(func.count()).where(
+                    and_(
+                        Message.chat_id == chat.id,
+                        Message.created_at > last_read_time,
+                        Message.sender_id != current_user_id,
+                    )
+                )
+                unread_count = (await db.execute(unread_stmt)).scalar() or 0
+        else:
+            count_stmt = select(func.count()).where(
+                and_(Message.chat_id == chat.id, Message.sender_id != current_user_id)
+            )
+            unread_count = (await db.execute(count_stmt)).scalar() or 0
+
+    # target_user для диалога
+    target_user = next((m for m in members if m.id != current_user_id), None) if chat.type == ChatType.dialog else None
 
     return {
         "id": chat.id,
         "type": chat.type,
-        "name": chat.name,
-        "avatar_url": chat.avatar_url,
+        "name": chat.name or (target_user.name if target_user else None),
+        "avatar_url": chat.avatar_url or (target_user.avatar_url if target_user else None),
         "updated_at": chat.updated_at,
         "unread_count": unread_count,
         "members": [
             {
-                "id": m.id,
-                "username": m.username,
-                "name": m.name,
-                "avatar_url": m.avatar_url,
-                "is_online": m.is_online or False,
+                "id": m.id, "username": m.username, "name": m.name,
+                "avatar_url": m.avatar_url, "is_online": m.is_online or False,
                 "is_bot": m.is_bot,
             }
             for m in members
         ],
         "last_message": last_message_data,
+        "target_user": {
+            "id": target_user.id, "username": target_user.username,
+            "name": target_user.name, "avatar_url": target_user.avatar_url,
+            "is_online": target_user.is_online or False,
+        } if target_user else None,
     }
 
 
@@ -119,35 +125,39 @@ async def create_chat(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Создать новый чат (диалог)."""
     if chat_in.type == ChatType.dialog:
         if not chat_in.target_user_id:
-            raise HTTPException(status_code=400, detail="target_user_id is required for dialog")
+            raise HTTPException(status_code=400, detail="target_user_id обязателен для диалога")
         if chat_in.target_user_id == current_user.id:
-            raise HTTPException(status_code=400, detail="Cannot create dialog with yourself")
+            raise HTTPException(status_code=400, detail="Нельзя создать диалог с собой")
 
-        target_user = (await db.execute(select(User).where(User.id == chat_in.target_user_id))).scalars().first()
+        target_user = (
+            await db.execute(select(User).where(User.id == chat_in.target_user_id))
+        ).scalars().first()
         if not target_user:
-            raise HTTPException(status_code=404, detail="Target user not found")
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        # Проверяем существующий диалог между двумя пользователями
+        # Проверяем существующий диалог
         existing_stmt = (
             select(Chat.id)
             .join(ChatMember, ChatMember.chat_id == Chat.id)
-            .where(Chat.type == ChatType.dialog, ChatMember.user_id.in_([current_user.id, chat_in.target_user_id]))
+            .where(
+                Chat.type == ChatType.dialog,
+                ChatMember.user_id.in_([current_user.id, chat_in.target_user_id]),
+            )
             .group_by(Chat.id)
             .having(func.count(ChatMember.user_id) == 2)
         )
-        existing_chat_id = (await db.execute(existing_stmt)).scalars().first()
-        if existing_chat_id:
-            existing_chat = (await db.execute(select(Chat).where(Chat.id == existing_chat_id))).scalars().first()
+        existing_id = (await db.execute(existing_stmt)).scalars().first()
+        if existing_id:
+            existing_chat = (
+                await db.execute(select(Chat).where(Chat.id == existing_id))
+            ).scalars().first()
             return await build_chat_response(existing_chat, current_user.id, db)
 
-        # Создаём чат
         new_chat = Chat(type=ChatType.dialog)
         db.add(new_chat)
         await db.flush()
-
         db.add_all([
             ChatMember(chat_id=new_chat.id, user_id=current_user.id),
             ChatMember(chat_id=new_chat.id, user_id=chat_in.target_user_id),
@@ -156,7 +166,7 @@ async def create_chat(
         await db.refresh(new_chat)
         return await build_chat_response(new_chat, current_user.id, db)
 
-    raise HTTPException(status_code=501, detail="Only dialog creation is supported right now")
+    raise HTTPException(status_code=501, detail="Только диалоги поддерживаются")
 
 
 @router.get("/", response_model=List[ChatResponse])
@@ -166,7 +176,6 @@ async def get_my_chats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Получить список чатов текущего пользователя."""
     stmt = (
         select(Chat)
         .join(ChatMember, ChatMember.chat_id == Chat.id)
@@ -175,16 +184,36 @@ async def get_my_chats(
         .offset(skip)
         .limit(limit)
     )
-    result = await db.execute(stmt)
-    chats = result.scalars().unique().all()
+    chats = (await db.execute(stmt)).scalars().unique().all()
 
-    # Собираем полные данные для каждого чата
-    response = []
+    result = []
     for chat in chats:
-        chat_data = await build_chat_response(chat, current_user.id, db)
-        response.append(chat_data)
+        try:
+            chat_data = await build_chat_response(chat, current_user.id, db)
+            result.append(chat_data)
+        except Exception as e:
+            logger.error(f"Error building chat response for {chat.id}: {e}")
+    return result
 
-    return response
+
+@router.get("/{chat_id}", response_model=ChatResponse)
+async def get_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Проверяем членство
+    member_stmt = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    if not (await db.execute(member_stmt)).scalars().first():
+        raise HTTPException(status_code=403, detail="Вы не являетесь участником этого чата")
+
+    chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+
+    return await build_chat_response(chat, current_user.id, db)
 
 
 @router.get("/{chat_id}/messages", response_model=List[MessageResponse])
@@ -195,28 +224,36 @@ async def get_chat_messages(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Получить историю сообщений чата."""
     # Проверяем членство
     member_stmt = select(ChatMember).where(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
     )
     if not (await db.execute(member_stmt)).scalars().first():
-        raise HTTPException(status_code=403, detail="You are not a member of this chat")
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
 
-    # Сообщения с sender и attachments
+    # Загружаем сообщения с отправителями и вложениями за один раз
     msg_stmt = (
         select(Message)
         .where(Message.chat_id == chat_id)
         .order_by(desc(Message.created_at))
         .offset(skip)
-        .limit(limit)
+        .limit(min(limit, 100))  # Максимум 100
+        .options(selectinload(Message.attachments))
     )
     messages = (await db.execute(msg_stmt)).scalars().all()
 
+    # Загружаем отправителей пачкой
+    sender_ids = list({m.sender_id for m in messages})
+    senders_map: Dict[str, User] = {}
+    if sender_ids:
+        senders_result = await db.execute(
+            select(User).where(User.id.in_(sender_ids))
+        )
+        senders_map = {u.id: u for u in senders_result.scalars().all()}
+
     result = []
     for msg in messages:
-        sender = (await db.execute(select(User).where(User.id == msg.sender_id))).scalars().first()
-        attachments = (await db.execute(select(Attachment).where(Attachment.message_id == msg.id))).scalars().all()
+        sender = senders_map.get(msg.sender_id)
         result.append({
             "id": msg.id,
             "chat_id": msg.chat_id,
@@ -224,16 +261,14 @@ async def get_chat_messages(
             "text": msg.text,
             "created_at": msg.created_at,
             "sender": {
-                "id": sender.id,
-                "username": sender.username,
-                "name": sender.name,
-                "avatar_url": sender.avatar_url,
+                "id": sender.id, "username": sender.username,
+                "name": sender.name, "avatar_url": sender.avatar_url,
                 "is_online": sender.is_online or False,
                 "is_bot": sender.is_bot,
             } if sender else None,
             "attachments": [
                 {"file_url": a.file_url, "file_type": a.file_type, "file_size": a.file_size}
-                for a in attachments
+                for a in msg.attachments
             ],
         })
 
