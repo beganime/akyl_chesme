@@ -1,25 +1,33 @@
 # app/api/v1/endpoints/chats.py
 import logging
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import and_, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import selectinload
-from typing import List, Any, Dict
 
-from app.db.session import get_db
-from app.models.user import User
-from app.models.chat import Chat, ChatMember, ChatType
-from app.models.message import Message, Attachment
-from app.schemas.chat import ChatCreate, ChatResponse, MessageResponse
 from app.api.deps import get_current_user
-
-from pydantic import BaseModel
+from app.db.session import get_db
 from app.models.chat import Chat, ChatMember, ChatType
+from app.models.message import Message
+from app.models.user import User
+from app.schemas.chat import ChatCreate, ChatResponse, MessageResponse
 
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class AddMembersRequest(BaseModel):
+    user_ids: List[str]
+
+
+class UpdateGroupRequest(BaseModel):
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 async def build_chat_response(
@@ -57,13 +65,21 @@ async def build_chat_response(
             "text": last_msg.text,
             "created_at": last_msg.created_at,
             "sender": {
-                "id": sender.id, "username": sender.username,
-                "name": sender.name, "avatar_url": sender.avatar_url,
+                "id": sender.id,
+                "username": sender.username,
+                "name": sender.name,
+                "avatar_url": sender.avatar_url,
                 "is_online": sender.is_online or False,
                 "is_bot": sender.is_bot,
-            } if sender else None,
+            }
+            if sender
+            else None,
             "attachments": [
-                {"file_url": a.file_url, "file_type": a.file_type, "file_size": a.file_size}
+                {
+                    "file_url": a.file_url,
+                    "file_type": a.file_type,
+                    "file_size": a.file_size,
+                }
                 for a in last_msg.attachments
             ],
         }
@@ -97,29 +113,41 @@ async def build_chat_response(
             unread_count = (await db.execute(count_stmt)).scalar() or 0
 
     # target_user для диалога
-    target_user = next((m for m in members if m.id != current_user_id), None) if chat.type == ChatType.dialog else None
+    target_user = (
+        next((m for m in members if m.id != current_user_id), None)
+        if chat.type == ChatType.dialog
+        else None
+    )
 
     return {
         "id": chat.id,
         "type": chat.type,
         "name": chat.name or (target_user.name if target_user else None),
-        "avatar_url": chat.avatar_url or (target_user.avatar_url if target_user else None),
+        "avatar_url": chat.avatar_url
+        or (target_user.avatar_url if target_user else None),
         "updated_at": chat.updated_at,
         "unread_count": unread_count,
         "members": [
             {
-                "id": m.id, "username": m.username, "name": m.name,
-                "avatar_url": m.avatar_url, "is_online": m.is_online or False,
+                "id": m.id,
+                "username": m.username,
+                "name": m.name,
+                "avatar_url": m.avatar_url,
+                "is_online": m.is_online or False,
                 "is_bot": m.is_bot,
             }
             for m in members
         ],
         "last_message": last_message_data,
         "target_user": {
-            "id": target_user.id, "username": target_user.username,
-            "name": target_user.name, "avatar_url": target_user.avatar_url,
+            "id": target_user.id,
+            "username": target_user.username,
+            "name": target_user.name,
+            "avatar_url": target_user.avatar_url,
             "is_online": target_user.is_online or False,
-        } if target_user else None,
+        }
+        if target_user
+        else None,
     }
 
 
@@ -131,7 +159,9 @@ async def create_chat(
 ):
     if chat_in.type == ChatType.dialog:
         if not chat_in.target_user_id:
-            raise HTTPException(status_code=400, detail="target_user_id обязателен для диалога")
+            raise HTTPException(
+                status_code=400, detail="target_user_id обязателен для диалога"
+            )
         if chat_in.target_user_id == current_user.id:
             raise HTTPException(status_code=400, detail="Нельзя создать диалог с собой")
 
@@ -162,15 +192,36 @@ async def create_chat(
         new_chat = Chat(type=ChatType.dialog)
         db.add(new_chat)
         await db.flush()
-        db.add_all([
-            ChatMember(chat_id=new_chat.id, user_id=current_user.id),
-            ChatMember(chat_id=new_chat.id, user_id=chat_in.target_user_id),
-        ])
+        db.add_all(
+            [
+                ChatMember(chat_id=new_chat.id, user_id=current_user.id),
+                ChatMember(chat_id=new_chat.id, user_id=chat_in.target_user_id),
+            ]
+        )
         await db.commit()
         await db.refresh(new_chat)
         return await build_chat_response(new_chat, current_user.id, db)
 
-    raise HTTPException(status_code=501, detail="Только диалоги поддерживаются")
+    if chat_in.type == ChatType.group:
+        if not chat_in.name:
+            raise HTTPException(status_code=400, detail="Название группы обязательно")
+
+        new_chat = Chat(
+            type=ChatType.group,
+            name=chat_in.name,
+            avatar_url=chat_in.avatar_url,
+        )
+        db.add(new_chat)
+        await db.flush()
+
+        all_members = list(set([current_user.id] + (chat_in.member_ids or [])))
+        db.add_all([ChatMember(chat_id=new_chat.id, user_id=uid) for uid in all_members])
+
+        await db.commit()
+        await db.refresh(new_chat)
+        return await build_chat_response(new_chat, current_user.id, db)
+
+    raise HTTPException(status_code=501, detail="Тип чата пока не поддерживается")
 
 
 @router.get("/", response_model=List[ChatResponse])
@@ -211,7 +262,9 @@ async def get_chat(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
     )
     if not (await db.execute(member_stmt)).scalars().first():
-        raise HTTPException(status_code=403, detail="Вы не являетесь участником этого чата")
+        raise HTTPException(
+            status_code=403, detail="Вы не являетесь участником этого чата"
+        )
 
     chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
     if not chat:
@@ -250,62 +303,50 @@ async def get_chat_messages(
     sender_ids = list({m.sender_id for m in messages})
     senders_map: Dict[str, User] = {}
     if sender_ids:
-        senders_result = await db.execute(
-            select(User).where(User.id.in_(sender_ids))
-        )
+        senders_result = await db.execute(select(User).where(User.id.in_(sender_ids)))
         senders_map = {u.id: u for u in senders_result.scalars().all()}
 
     result = []
     for msg in messages:
         sender = senders_map.get(msg.sender_id)
-        result.append({
-            "id": msg.id,
-            "chat_id": msg.chat_id,
-            "sender_id": msg.sender_id,
-            "text": msg.text,
-            "created_at": msg.created_at,
-            "sender": {
-                "id": sender.id, "username": sender.username,
-                "name": sender.name, "avatar_url": sender.avatar_url,
-                "is_online": sender.is_online or False,
-                "is_bot": sender.is_bot,
-            } if sender else None,
-            "attachments": [
-                {"file_url": a.file_url, "file_type": a.file_type, "file_size": a.file_size}
-                for a in msg.attachments
-            ],
-        })
+        result.append(
+            {
+                "id": msg.id,
+                "chat_id": msg.chat_id,
+                "sender_id": msg.sender_id,
+                "text": msg.text,
+                "created_at": msg.created_at,
+                "sender": {
+                    "id": sender.id,
+                    "username": sender.username,
+                    "name": sender.name,
+                    "avatar_url": sender.avatar_url,
+                    "is_online": sender.is_online or False,
+                    "is_bot": sender.is_bot,
+                }
+                if sender
+                else None,
+                "attachments": [
+                    {
+                        "file_url": a.file_url,
+                        "file_type": a.file_type,
+                        "file_size": a.file_size,
+                    }
+                    for a in msg.attachments
+                ],
+            }
+        )
 
     return result
 
-# ── Эндпоинты (добавить в существующий router) ────────────────────────────────
 
-# POST /chats/ — уже обрабатывает dialog, добавить ветку для group:
-# В существующем create_chat добавить:
-#
-#   if chat_in.type == ChatType.group:
-#       if not chat_in.name:
-#           raise HTTPException(400, "Название группы обязательно")
-#       new_chat = Chat(type=ChatType.group, name=chat_in.name, avatar_url=chat_in.avatar_url)
-#       db.add(new_chat)
-#       await db.flush()
-#       # Добавляем создателя + участников
-#       all_members = list(set([current_user.id] + (chat_in.member_ids or [])))
-#       for uid in all_members:
-#           db.add(ChatMember(chat_id=new_chat.id, user_id=uid))
-#       await db.commit()
-#       await db.refresh(new_chat)
-#       return await build_chat_response(new_chat, current_user.id, db)
-
-
-# GET /chats/{chat_id}/members
+@router.get("/{chat_id}/members")
 async def get_chat_members_endpoint(
     chat_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Получить список участников чата."""
-    # Проверяем членство
     member_check = select(ChatMember).where(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
     )
@@ -321,7 +362,7 @@ async def get_chat_members_endpoint(
     return members
 
 
-# POST /chats/{chat_id}/members
+@router.post("/{chat_id}/members")
 async def add_members_endpoint(
     chat_id: str,
     payload: AddMembersRequest,
@@ -331,18 +372,16 @@ async def add_members_endpoint(
     """Добавить участников в групповой чат."""
     chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
     if not chat or chat.type != ChatType.group:
-        raise HTTPException(400, "Не является групповым чатом")
+        raise HTTPException(status_code=400, detail="Не является групповым чатом")
 
-    # Проверяем что текущий пользователь в группе
     member_check = select(ChatMember).where(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
     )
     if not (await db.execute(member_check)).scalars().first():
-        raise HTTPException(403, "Нет доступа")
+        raise HTTPException(status_code=403, detail="Нет доступа")
 
     added = []
     for uid in payload.user_ids:
-        # Проверяем что уже не в группе
         existing = select(ChatMember).where(
             and_(ChatMember.chat_id == chat_id, ChatMember.user_id == uid)
         )
@@ -356,7 +395,7 @@ async def add_members_endpoint(
     return {"added": len(added)}
 
 
-# DELETE /chats/{chat_id}/members/{user_id}
+@router.delete("/{chat_id}/members/{user_id}")
 async def remove_member_endpoint(
     chat_id: str,
     user_id: str,
@@ -364,19 +403,29 @@ async def remove_member_endpoint(
     current_user: User = Depends(get_current_user),
 ):
     """Удалить участника из группы."""
+    chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
+    if not chat or chat.type != ChatType.group:
+        raise HTTPException(status_code=400, detail="Не является групповым чатом")
+
+    member_check = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    if not (await db.execute(member_check)).scalars().first():
+        raise HTTPException(status_code=403, detail="Нет доступа")
+
     member_stmt = select(ChatMember).where(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == user_id)
     )
     member = (await db.execute(member_stmt)).scalars().first()
     if not member:
-        raise HTTPException(404, "Участник не найден")
+        raise HTTPException(status_code=404, detail="Участник не найден")
 
     await db.delete(member)
     await db.commit()
     return {"ok": True}
 
 
-# POST /chats/{chat_id}/leave
+@router.post("/{chat_id}/leave")
 async def leave_group_endpoint(
     chat_id: str,
     db: AsyncSession = Depends(get_db),
@@ -388,14 +437,14 @@ async def leave_group_endpoint(
     )
     member = (await db.execute(member_stmt)).scalars().first()
     if not member:
-        raise HTTPException(404, "Вы не в этой группе")
+        raise HTTPException(status_code=404, detail="Вы не в этой группе")
 
     await db.delete(member)
     await db.commit()
     return {"ok": True}
 
 
-# PUT /chats/{chat_id}
+@router.put("/{chat_id}")
 async def update_group_endpoint(
     chat_id: str,
     payload: UpdateGroupRequest,
@@ -405,14 +454,15 @@ async def update_group_endpoint(
     """Обновить название/аватар группы."""
     chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
     if not chat:
-        raise HTTPException(404, "Чат не найден")
+        raise HTTPException(status_code=404, detail="Чат не найден")
+    if chat.type != ChatType.group:
+        raise HTTPException(status_code=400, detail="Редактирование доступно только для групп")
 
-    # Проверяем членство
     member_check = select(ChatMember).where(
         and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
     )
     if not (await db.execute(member_check)).scalars().first():
-        raise HTTPException(403, "Нет доступа")
+        raise HTTPException(status_code=403, detail="Нет доступа")
 
     if payload.name is not None:
         chat.name = payload.name
@@ -422,15 +472,3 @@ async def update_group_endpoint(
     await db.commit()
     await db.refresh(chat)
     return chat
-
-
-# ── Регистрация роутов (добавить в конец файла chats.py) ─────────────────────
-#
-# from fastapi import APIRouter
-# router = APIRouter()  # уже есть
-#
-# router.get("/{chat_id}/members")(get_chat_members_endpoint)
-# router.post("/{chat_id}/members")(add_members_endpoint)
-# router.delete("/{chat_id}/members/{user_id}")(remove_member_endpoint)
-# router.post("/{chat_id}/leave")(leave_group_endpoint)
-# router.put("/{chat_id}")(update_group_endpoint)
