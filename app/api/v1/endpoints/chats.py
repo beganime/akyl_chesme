@@ -14,6 +14,10 @@ from app.models.message import Message, Attachment
 from app.schemas.chat import ChatCreate, ChatResponse, MessageResponse
 from app.api.deps import get_current_user
 
+from pydantic import BaseModel
+from app.models.chat import Chat, ChatMember, ChatType
+
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -273,3 +277,160 @@ async def get_chat_messages(
         })
 
     return result
+
+# ── Эндпоинты (добавить в существующий router) ────────────────────────────────
+
+# POST /chats/ — уже обрабатывает dialog, добавить ветку для group:
+# В существующем create_chat добавить:
+#
+#   if chat_in.type == ChatType.group:
+#       if not chat_in.name:
+#           raise HTTPException(400, "Название группы обязательно")
+#       new_chat = Chat(type=ChatType.group, name=chat_in.name, avatar_url=chat_in.avatar_url)
+#       db.add(new_chat)
+#       await db.flush()
+#       # Добавляем создателя + участников
+#       all_members = list(set([current_user.id] + (chat_in.member_ids or [])))
+#       for uid in all_members:
+#           db.add(ChatMember(chat_id=new_chat.id, user_id=uid))
+#       await db.commit()
+#       await db.refresh(new_chat)
+#       return await build_chat_response(new_chat, current_user.id, db)
+
+
+# GET /chats/{chat_id}/members
+async def get_chat_members_endpoint(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Получить список участников чата."""
+    # Проверяем членство
+    member_check = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    if not (await db.execute(member_check)).scalars().first():
+        raise HTTPException(status_code=403, detail="Вы не являетесь участником")
+
+    members_stmt = (
+        select(User)
+        .join(ChatMember, ChatMember.user_id == User.id)
+        .where(ChatMember.chat_id == chat_id)
+    )
+    members = (await db.execute(members_stmt)).scalars().all()
+    return members
+
+
+# POST /chats/{chat_id}/members
+async def add_members_endpoint(
+    chat_id: str,
+    payload: AddMembersRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Добавить участников в групповой чат."""
+    chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
+    if not chat or chat.type != ChatType.group:
+        raise HTTPException(400, "Не является групповым чатом")
+
+    # Проверяем что текущий пользователь в группе
+    member_check = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    if not (await db.execute(member_check)).scalars().first():
+        raise HTTPException(403, "Нет доступа")
+
+    added = []
+    for uid in payload.user_ids:
+        # Проверяем что уже не в группе
+        existing = select(ChatMember).where(
+            and_(ChatMember.chat_id == chat_id, ChatMember.user_id == uid)
+        )
+        if not (await db.execute(existing)).scalars().first():
+            db.add(ChatMember(chat_id=chat_id, user_id=uid))
+            added.append(uid)
+
+    if added:
+        await db.commit()
+
+    return {"added": len(added)}
+
+
+# DELETE /chats/{chat_id}/members/{user_id}
+async def remove_member_endpoint(
+    chat_id: str,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить участника из группы."""
+    member_stmt = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == user_id)
+    )
+    member = (await db.execute(member_stmt)).scalars().first()
+    if not member:
+        raise HTTPException(404, "Участник не найден")
+
+    await db.delete(member)
+    await db.commit()
+    return {"ok": True}
+
+
+# POST /chats/{chat_id}/leave
+async def leave_group_endpoint(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Выйти из группы."""
+    member_stmt = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    member = (await db.execute(member_stmt)).scalars().first()
+    if not member:
+        raise HTTPException(404, "Вы не в этой группе")
+
+    await db.delete(member)
+    await db.commit()
+    return {"ok": True}
+
+
+# PUT /chats/{chat_id}
+async def update_group_endpoint(
+    chat_id: str,
+    payload: UpdateGroupRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить название/аватар группы."""
+    chat = (await db.execute(select(Chat).where(Chat.id == chat_id))).scalars().first()
+    if not chat:
+        raise HTTPException(404, "Чат не найден")
+
+    # Проверяем членство
+    member_check = select(ChatMember).where(
+        and_(ChatMember.chat_id == chat_id, ChatMember.user_id == current_user.id)
+    )
+    if not (await db.execute(member_check)).scalars().first():
+        raise HTTPException(403, "Нет доступа")
+
+    if payload.name is not None:
+        chat.name = payload.name
+    if payload.avatar_url is not None:
+        chat.avatar_url = payload.avatar_url
+
+    await db.commit()
+    await db.refresh(chat)
+    return chat
+
+
+# ── Регистрация роутов (добавить в конец файла chats.py) ─────────────────────
+#
+# from fastapi import APIRouter
+# router = APIRouter()  # уже есть
+#
+# router.get("/{chat_id}/members")(get_chat_members_endpoint)
+# router.post("/{chat_id}/members")(add_members_endpoint)
+# router.delete("/{chat_id}/members/{user_id}")(remove_member_endpoint)
+# router.post("/{chat_id}/leave")(leave_group_endpoint)
+# router.put("/{chat_id}")(update_group_endpoint)

@@ -1,10 +1,10 @@
+# app/schemas/chat.py
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 from app.models.chat import ChatType
 
 
-# ── User brief (используется внутри чатов) ────────────────────────────────────
 class UserBriefResponse(BaseModel):
     id: str
     username: str
@@ -12,20 +12,17 @@ class UserBriefResponse(BaseModel):
     avatar_url: Optional[str] = None
     is_online: bool = False
     is_bot: bool = False
-
+    last_seen: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── Вложения ──────────────────────────────────────────────────────────────────
 class AttachmentResponse(BaseModel):
     file_url: str
-    file_type: str  # image, video, audio, document
+    file_type: str
     file_size: Optional[int] = None
-
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── Сообщение ─────────────────────────────────────────────────────────────────
 class MessageResponse(BaseModel):
     id: str
     chat_id: str
@@ -34,17 +31,19 @@ class MessageResponse(BaseModel):
     created_at: datetime
     sender: Optional[UserBriefResponse] = None
     attachments: List[AttachmentResponse] = []
-
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── Создание чата ─────────────────────────────────────────────────────────────
 class ChatCreate(BaseModel):
     type: ChatType
+    # Диалог
     target_user_id: Optional[str] = None
+    # Группа
+    name: Optional[str] = None
+    member_ids: Optional[List[str]] = None
+    avatar_url: Optional[str] = None
 
 
-# ── Ответ чата — полный, как ожидает клиент ───────────────────────────────────
 class ChatResponse(BaseModel):
     id: str
     type: ChatType
@@ -54,5 +53,5 @@ class ChatResponse(BaseModel):
     unread_count: int = 0
     members: List[UserBriefResponse] = []
     last_message: Optional[MessageResponse] = None
-
+    target_user: Optional[UserBriefResponse] = None
     model_config = ConfigDict(from_attributes=True)
