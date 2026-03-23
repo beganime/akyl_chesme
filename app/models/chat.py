@@ -1,3 +1,4 @@
+# app/models/chat.py
 import enum
 from sqlalchemy import Column, String, Enum, ForeignKey, DateTime, func
 from sqlalchemy.orm import relationship
@@ -12,11 +13,12 @@ class ChatType(str, enum.Enum):
 class Chat(Base):
     __tablename__ = "chats"
 
-    # Используем Enum на уровне БД (native_enum=False для универсальности)
     type = Column(Enum(ChatType, native_enum=False), nullable=False, index=True)
     
-    # Переопределяем updated_at, чтобы повесить на него B-Tree индекс, 
-    # как указано в ТЗ (для быстрой сортировки ленты чатов)
+    # Поля для группового чата / имени
+    name = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
 
     # Связи
@@ -29,9 +31,6 @@ class ChatMember(Base):
 
     chat_id = Column(String, ForeignKey("chats.id"), index=True, nullable=False)
     user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
-    
-    # ID последнего прочитанного сообщения (для быстрого подсчета unread_count)
-    # use_alter=True помогает избежать циклических зависимостей при создании таблиц
     last_read_msg = Column(String, ForeignKey("messages.id", use_alter=True), nullable=True)
 
     # Связи
